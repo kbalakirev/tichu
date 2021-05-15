@@ -1,11 +1,10 @@
 #include <gtest/gtest.h>
 
-#include <server/lib/gameplay/cards/impl.h>
+#include <server/lib/gameplay/cards/cards.h>
 
 #include <unordered_set>
 
 using namespace NTichu::NGameplay::NCards;
-
 
 TEST(Card, Defined) {
     TCard def;
@@ -27,7 +26,7 @@ TEST(Card, Defined) {
 }
 
 TEST(Card, Basic) {
-    for (auto value: ArrayValues) {
+    for (auto value: AllValues) {
         if (value == EValue::DRAGON ||
             value == EValue::PHOENIX ||
             value == EValue::DOG ||
@@ -37,7 +36,7 @@ TEST(Card, Basic) {
             continue;
         }
 
-        for (ESuit suit: ArraySuits) {
+        for (ESuit suit: AllSuits) {
             ASSERT_TRUE(TCard(value, suit).Basic());
         }
     }
@@ -49,12 +48,12 @@ TEST(Card, ValueAndSuit) {
     ASSERT_EQ(TCard::Phoenix().Value(), EValue::PHOENIX);
     ASSERT_EQ(TCard::Dragon().Value(), EValue::DRAGON);
 
-    for (EValue value: ArrayValues) {
+    for (EValue value: AllValues) {
         if (!TCard(value).Basic()) {
             continue;
         }
 
-        for (ESuit suit: ArraySuits) {
+        for (ESuit suit: AllSuits) {
             ASSERT_EQ(TCard(value, suit).Value(), value);
             ASSERT_EQ(TCard(value, suit).Suit(), suit);
         }
@@ -206,9 +205,9 @@ TEST(Cards, Iter) {
         cards.insert(card);
     }
 
-    for (auto value: ArrayValues) {
+    for (auto value: AllValues) {
         if (TCard(value).Basic()) {
-            for (auto suit: ArraySuits) {
+            for (auto suit: AllSuits) {
                 ASSERT_TRUE(cards.count(TCard(value, suit)));
             }
         } else {

@@ -10,4 +10,6 @@ target_include_directories(gameplay-ut PRIVATE ${GTEST_INCLUDE_DIR} ${ROOT_SOURC
 
 enable_testing()
 
+set_property(TARGET gameplay-ut PROPERTY CXX_STANDARD 20)
+
 add_test(gameplay-test gameplay-ut)

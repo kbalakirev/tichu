@@ -1,4 +1,4 @@
-#include "impl.h"
+#include "cards.h"
 
 #include <sstream>
 
@@ -6,34 +6,34 @@ namespace NTichu::NGameplay::NCards {
 
 std::string AsString(ESuit suit) {
     switch (suit) {
-        case ESuit::JACK: return "JA";
-        case ESuit::SWORD: return "SW";
-        case ESuit::STAR: return "ST";
-        case ESuit::PAGODA: return "PA";
-        default: return "IN";
+        case ESuit::JACK: return "JACK";
+        case ESuit::SWORD: return "SWORD";
+        case ESuit::STAR: return "STAR";
+        case ESuit::PAGODA: return "PAGODA";
+        default: return "INVALID";
     }
 }
 
 std::string AsString(EValue value) {
     switch (value) {
-        case EValue::TWO: return "TW";
-        case EValue::THREE: return "TH";
-        case EValue::FOUR: return "FO";
-        case EValue::FIVE: return "FI";
-        case EValue::SIX: return "SI";
-        case EValue::SEVEN: return "SE";
-        case EValue::EIGHT: return "EI";
-        case EValue::NINE: return "NI";
-        case EValue::TEN: return "TE";
-        case EValue::JACK: return "JA";
-        case EValue::QUEEN: return "QU";
-        case EValue::KING: return "KI";
-        case EValue::ACE: return "AC";
-        case EValue::MAH_JONG: return "MJ";
-        case EValue::DOG: return "DO";
-        case EValue::PHOENIX: return "PH";
-        case EValue::DRAGON: return "DR";
-        default: return "IN";
+        case EValue::TWO: return "2";
+        case EValue::THREE: return "3";
+        case EValue::FOUR: return "4";
+        case EValue::FIVE: return "5";
+        case EValue::SIX: return "6";
+        case EValue::SEVEN: return "7";
+        case EValue::EIGHT: return "8";
+        case EValue::NINE: return "9";
+        case EValue::TEN: return "10";
+        case EValue::JACK: return "JACK";
+        case EValue::QUEEN: return "QUEEN";
+        case EValue::KING: return "KING";
+        case EValue::ACE: return "ACE";
+        case EValue::MAH_JONG: return "1";
+        case EValue::DOG: return "DOG";
+        case EValue::PHOENIX: return "PHX";
+        case EValue::DRAGON: return "DRAGON";
+        default: return "INVALID";
     }
 }
 

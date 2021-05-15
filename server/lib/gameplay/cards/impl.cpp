@@ -1,70 +1,19 @@
-#pragma once
+#include "cards.h"
 
-#include <server/lib/types/types.h>
+#ifdef ENABLE_INLINE_CARDS
+    #define CARDS_CONSTEXPR CARDS_CONSTEXPR
+#else
+    #define CARDS_CONSTEXPR
+#endif
 
+#include <functional>
 #include <bit>
-#include <limits>
 
 namespace NTichu::NGameplay::NCards {
-
-using TCardId = ui8;
-using TCardsMask = ui64;
-using TScore = i8;
-
-enum class ESuit: ui8 {
-    JACK = 0,
-    SWORD,
-    PAGODA,
-    STAR,
-
-    INVALID = std::numeric_limits<ui8>::max()
-};
-
-enum class EValue: ui8 {
-    DOG = 0,
-    MAH_JONG = 1,
-    PHOENIX = 2,
-    TWO = 4,
-    THREE = 8,
-    FOUR = 12,
-    FIVE = 16,
-    SIX = 20,
-    SEVEN = 24,
-    EIGHT = 28,
-    NINE = 32,
-    TEN = 36,
-    JACK = 40,
-    QUEEN = 44,
-    KING = 48,
-    ACE = 52,
-    DRAGON = 56,
-
-    INVALID = std::numeric_limits<ui8>::max(),
-};
-
-enum class ECombination: ui8 {
-    SINGLE = 1,
-    PAIR = 2,
-    TRIPLE = 3,
-    QUAD = 4,
-    FULL_HOUSE = 5,
-    ADJ_PAIRS = 6,
-    STRAIGHT = 7,
-    STRAIGHT_FLUSH = 8,
-    DOG = 9,
-    EMPTY = 10,
-
-    INVALID = std::numeric_limits<ui8>::max(),
-};
 
 class TBase {
 // constants
 public:
-    static constexpr ui8 NUM_SUITS = 4;
-    static constexpr ui8 NUM_VALUES = 17;
-    static constexpr ui8 NUM_CARDS = 26;
-
-protected:
     static constexpr TCardsMask MK_1 = 1;
     static constexpr TCardsMask MK_2 = 3;
     static constexpr TCardsMask MK_4 = 15;
@@ -125,7 +74,7 @@ protected:
     static constexpr TCardId INVALID_CARD_ID = std::numeric_limits<ui8>::max();
 
 // helpers
-protected:
+public:
     static constexpr ui8 NumCards(TCardsMask cards) noexcept {
         return std::__popcount(cards);
     }
@@ -246,21 +195,21 @@ protected:
     }
 
     static constexpr TCardsMask RepPh(TCardsMask cards, EValue phRep) noexcept {
-            if (Mask(Card(phRep)) & MK_ALL_SPECIAL) {
-                return 0;
-            }
-
-            if (!(cards & MK_PHX)) {
-                return 0;
-            }
-
-            ui8 shift = LastSkipedCard((cards >> Card(phRep)));
-            if (shift >= NUM_SUITS) {
-                return 0;
-            }
-
-            return (cards | Card(phRep, (ESuit) shift)) & ~MK_PHX;
+        if (Mask(Card(phRep)) & MK_ALL_SPECIAL) {
+            return 0;
         }
+
+        if (!(cards & MK_PHX)) {
+            return 0;
+        }
+
+        ui8 shift = LastSkipedCard((cards >> Card(phRep)));
+        if (shift >= NUM_SUITS) {
+            return 0;
+        }
+
+        return (cards | Card(phRep, (ESuit) shift)) & ~MK_PHX;
+    }
 
 private:
     static constexpr ECombination CombTyNoRep(TCardsMask cards) noexcept {
@@ -414,4 +363,322 @@ private:
     }
 };
 
-} // namespace NTichu::NGameplay::NCards
+CARDS_CONSTEXPR TCard::TCard() noexcept
+    : Id_{TBase::INVALID_CARD_ID}
+{
+}
+
+CARDS_CONSTEXPR TCard::TCard(TCardId cardId) noexcept
+        : Id_(cardId) {
+}
+
+CARDS_CONSTEXPR TCard::TCard(EValue value) noexcept
+    : Id_(TBase::Card(value))
+{
+}
+
+CARDS_CONSTEXPR TCard::TCard(EValue value, ESuit suit) noexcept
+    : Id_(TBase::Card(value, suit))
+{
+}
+
+CARDS_CONSTEXPR bool TCard::Defined() const noexcept {
+    return TBase::ValidateCard(Id_);
+}
+
+CARDS_CONSTEXPR EValue TCard::Value() const noexcept {
+    return TBase::Value(Id_);
+}
+
+CARDS_CONSTEXPR ESuit TCard::Suit() const noexcept {
+    return TBase::Suit(Id_);
+}
+
+CARDS_CONSTEXPR TCardId TCard::Id() const noexcept {
+    return Id_;
+}
+
+CARDS_CONSTEXPR bool TCard::Basic() const noexcept {
+    return TBase::Mask(Id_) & TBase::MK_ALL_BASE;
+}
+
+CARDS_CONSTEXPR TCards TCard::AsCards() const noexcept {
+    return TCards(TBase::Mask(Id_));
+}
+
+CARDS_CONSTEXPR TCard TCard::MahJong() noexcept {
+    return TCard(TBase::Card(EValue::MAH_JONG));
+}
+
+CARDS_CONSTEXPR TCard TCard::Dog() noexcept {
+    return TCard(TBase::Card(EValue::DOG));
+}
+
+CARDS_CONSTEXPR TCard TCard::Phoenix() noexcept {
+    return TCard(TBase::Card(EValue::PHOENIX));
+}
+
+CARDS_CONSTEXPR TCard TCard::Dragon() noexcept {
+    return TCard(TBase::Card(EValue::DRAGON));
+}
+
+CARDS_CONSTEXPR bool TCard::operator==(TCard other) const noexcept {
+    return other.Id_ == Id_;
+}
+
+CARDS_CONSTEXPR bool TCard::operator!=(TCard other) const noexcept {
+    return other.Id_ != Id_;
+}
+
+CARDS_CONSTEXPR TCard::operator bool() noexcept {
+    return TCard::Defined();
+}
+
+CARDS_CONSTEXPR TCards::TCards(TCard card) noexcept
+    : Mask_(TBase::Mask(card.Id()))
+{
+}
+
+CARDS_CONSTEXPR TCards::TCards(TCardsMask mask) noexcept
+    : Mask_(mask)
+{
+}
+
+CARDS_CONSTEXPR TCards::TCards(NTichu::NGameplay::NCards::TCombination comb) noexcept
+    : Mask_(comb.AsCards().Mask())
+{
+}
+
+CARDS_CONSTEXPR void TCards::Join(TCards cards) noexcept {
+    Mask_ |= cards.Mask_;
+}
+
+CARDS_CONSTEXPR void TCards::Rm(TCards cards) noexcept {
+    Mask_ &= ~cards.Mask_;
+}
+
+CARDS_CONSTEXPR void TCards::Drop() noexcept {
+    Mask_ = 0;
+}
+
+CARDS_CONSTEXPR bool TCards::Empty() const noexcept {
+    return !Mask_;
+}
+
+CARDS_CONSTEXPR ui8 TCards::Num() const noexcept { return TBase::NumCards(Mask_); }
+CARDS_CONSTEXPR TCardsMask TCards::Mask() const noexcept { return Mask_; }
+
+CARDS_CONSTEXPR bool TCards::Has(TCards cards) const noexcept {
+    return (Mask_ | cards.Mask_) == Mask_;
+}
+
+CARDS_CONSTEXPR bool TCards::HasAny(TCards cards) const noexcept {
+    return (Mask_ & cards.Mask_);
+}
+
+CARDS_CONSTEXPR TCard TCards::Last() const noexcept {
+    return TCard(TBase::LastCard(Mask_));
+}
+
+CARDS_CONSTEXPR TScore TCards::Score() const noexcept {
+    return TBase::Score(Mask_);
+}
+
+CARDS_CONSTEXPR TCards TCards::Deck() noexcept {
+    return TCards(TBase::MK_ALL);
+}
+
+CARDS_CONSTEXPR bool TCards::operator==(TCards other) const noexcept {
+    return Mask_ == other.Mask_;
+}
+
+CARDS_CONSTEXPR bool TCards::operator!=(TCards other) const noexcept {
+    return Mask_ != other.Mask_;
+}
+
+CARDS_CONSTEXPR TCard TCards::TIterator::operator*() const noexcept {
+    return TCard(TBase::LastCard(Mask_));
+}
+
+CARDS_CONSTEXPR bool TCards::TIterator::operator==(TCards::TIterator other) const noexcept {
+    return Mask_ == other.Mask_;
+}
+
+CARDS_CONSTEXPR bool TCards::TIterator::operator!=(TCards::TIterator other) const noexcept {
+    return Mask_ != other.Mask_;
+}
+
+CARDS_CONSTEXPR TCards::TIterator& TCards::TIterator::operator++() noexcept {
+    Mask_ ^= TBase::Mask(TBase::LastCard(Mask_));
+    return *this;
+}
+
+CARDS_CONSTEXPR TCards::TIterator::TIterator(TCards cards) noexcept: Mask_(cards.Mask()) {}
+
+CARDS_CONSTEXPR TCards::TIterator TCards::begin() const noexcept {
+    return TIterator(*this);
+}
+
+CARDS_CONSTEXPR TCards::TIterator TCards::end() const noexcept {
+    return TIterator(TCards(0));
+}
+
+CARDS_CONSTEXPR TCombination::TCombination(TCards cards, EValue phRep) noexcept
+    : PhRep_(phRep), Type_(TBase::CombTy(cards.Mask(), phRep)), Mask_(cards.Mask())
+{
+}
+
+CARDS_CONSTEXPR ECombination TCombination::Ty() const noexcept {
+    return Type_;
+}
+
+CARDS_CONSTEXPR EValue TCombination::PhRep() const noexcept {
+    return PhRep_;
+}
+
+CARDS_CONSTEXPR TCards TCombination::AsCards() const noexcept {
+    return TCards(Mask_);
+}
+
+CARDS_CONSTEXPR bool TCombination::Defined() const noexcept {
+    return Type_ != ECombination::INVALID;
+}
+
+CARDS_CONSTEXPR bool TCombination::IsBomb() const noexcept {
+    return TBase::IsBomb(Type_);
+}
+
+CARDS_CONSTEXPR void TCombination::Drop() noexcept {
+    Mask_ = 0;
+    PhRep_ = EValue::INVALID;
+    Type_ = ECombination::EMPTY;
+}
+
+CARDS_CONSTEXPR bool TCombination::operator==(TCombination other) const noexcept {
+    return Mask_ == other.Mask_ && PhRep_ == other.PhRep_;
+}
+
+CARDS_CONSTEXPR bool TCombination::operator!=(TCombination other) const noexcept {
+    return !(*this == other);
+}
+
+CARDS_CONSTEXPR TCombination::operator bool() const noexcept {
+    return Defined();
+}
+
+CARDS_CONSTEXPR TCombination TCombination::Invalid() noexcept {
+    TCombination comb;
+    comb.Type_ = ECombination::INVALID;
+    return comb;
+}
+
+CARDS_CONSTEXPR TCardsMask TCombination::CombMask() const noexcept {
+    if (!TBase::ValidateValue(PhRep_)) {
+        return Mask_;
+    }
+
+    return TBase::RepPh(Mask_, PhRep_);
+}
+
+CARDS_CONSTEXPR TCombination TCombination::Combine(TCombination comb) const noexcept {
+    if (!comb.Defined() || !Defined()) {
+        return Invalid();
+    }
+
+    switch (Type_) {
+        case ECombination::EMPTY: {
+            return comb;
+        }
+        case ECombination::DOG: {
+            return Invalid();
+        }
+        case ECombination::SINGLE: {
+            if (comb.IsBomb()) {
+                return comb;
+            } else if (comb.Ty() != ECombination::SINGLE) {
+                return Invalid();
+            }
+
+            if (TBase::CombinableSingle(CombMask(), comb.CombMask())) {
+                if (comb.AsCards().Has(TCard::Phoenix())) {
+                    return TCombination(comb.AsCards(), comb.AsCards().Last().Value());
+                }
+
+                return comb;
+            }
+
+            return Invalid();
+        }
+        case ECombination::PAIR:
+        case ECombination::TRIPLE: {
+            if (comb.IsBomb()) {
+                return comb;
+            }
+
+            if (TBase::CombinableSingleValue(CombMask(), comb.CombMask())) {
+                return comb;
+            }
+
+            return Invalid();
+        }
+
+        case ECombination::FULL_HOUSE: {
+            if (comb.IsBomb()) {
+                return comb;
+            }
+
+            if (TBase::CombinableFullHouse(CombMask(), comb.CombMask())) {
+                return comb;
+            }
+
+            return Invalid();
+        }
+
+        case ECombination::STRAIGHT:
+        case ECombination::ADJ_PAIRS: {
+            if (comb.IsBomb()) {
+                return comb;
+            }
+
+            if (TBase::CombinableStraightType(CombMask(), comb.CombMask())) {
+                return comb;
+            }
+
+            return Invalid();
+        }
+        case ECombination::QUAD: {
+            if (comb.Ty() == ECombination::STRAIGHT_FLUSH) {
+                return comb;
+            }
+
+            if (comb.Ty() != ECombination::QUAD) {
+                return Invalid();
+            }
+
+            if (TBase::CombinableSingleValue(CombMask(), comb.CombMask())) {
+                return comb;
+            }
+
+            return Invalid();
+        }
+        case ECombination::STRAIGHT_FLUSH: {
+            if (comb.Ty() != ECombination::STRAIGHT_FLUSH) {
+                return Invalid();
+            }
+
+            if (TBase::CombinableStraightFlush(CombMask(), comb.CombMask())) {
+                return comb;
+            }
+
+            return Invalid();
+        }
+
+        default: {
+            return Invalid();
+        }
+    }
+}
+
+} // NTichu::NGameplay::NCards
+
+#undef CARDS_CONSTEXPR

@@ -4,7 +4,7 @@ project(GAMEPLAY)
 
 add_subdirectory(ut)
 
-add_library(gameplay gameplay.cpp cards/cards.cpp cards/impl.cpp)
+add_library(gameplay gameplay.cpp cards/cards.cpp cards/impl.cpp state/state.cpp state/generator.cpp)
 
 target_include_directories(gameplay PRIVATE ${ROOT_SOURCE_DIR})
 

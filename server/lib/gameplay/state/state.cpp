@@ -24,14 +24,47 @@ enum class EInnerState {
 };
 
 struct TInnerState {
-    TInnerState() {
-
+    TInnerState(IGeneratorPtr generator)
+        : Generator(std::move(generator))
+    {
+        ResetState();
     }
+
     void ResetRound() {
+        Generator->Reset();
 
+        for (auto& cards: Cards) {
+            cards = TCards();
+        }
+
+        for (auto& trick: Trick) {
+            trick = TCards();
+        }
+
+        for (auto& call: Call) {
+            call = ECall::UNDEFINED;
+        }
+
+        for (auto& ex: Exchange) {
+            for (auto& card: ex) {
+                card = TCard();
+            }
+        }
+
+        LastComb = TCombination();
+        ActiveCards = TCards();
+
+        ActivePlayer = EPosition::INVALID;
+        TrickPlayer = EPosition::INVALID;
+        DonePlayer = EPosition::INVALID;
     }
-    void ResetState() {
 
+    void ResetState() {
+        for (auto& score: Score) {
+            score = 0;
+        }
+
+        ResetRound();
     }
 
     IGeneratorPtr Generator;
@@ -52,8 +85,10 @@ struct TInnerState {
 
 class TState: public IState {
 public:
-    TState(IGeneratorPtr generator) {
-
+    TState(IGeneratorPtr generator)
+        : State_(std::move(generator))
+        , Type_(EInnerState::NOT_INITIALIZED)
+    {
     }
 
 public:
@@ -63,12 +98,16 @@ public:
     static constexpr ui32 CARDS_INIT = 8;
     static constexpr ui32 CARDS_TOTAL = 14;
 
+    static constexpr TScore GRAND_TICHU_SCORE = 200;
+    static constexpr TScore SMALL_TICHU_SCORE = 100;
+    static constexpr TScore TEAM_DONE_SCORE = 200;
+
 private:
     template <class TEv>
     TStateErrorOr Advance(TEv ev);
 
     void Start() override {
-        auto _ = Advance(TEvNone());
+        assert(Advance(TEvNone()).Succeed());
     }
 
     TStateErrorOr Move(TEvMove move) override {
@@ -95,13 +134,168 @@ private:
         return TSnapshot();
     }
 
-private:
+    EState State() const override {
+        return (EState) Type_;
+    }
+
+public:
     TInnerState State_;
     EInnerState Type_;
 };
 
 std::unique_ptr<IState> CreateState(IGeneratorPtr generator) {
     return std::make_unique<TState>(std::move(generator));
+}
+
+EPosition NextActive(const TInnerState& state, EPosition from) {
+    for (size_t i = 0; i < (ui32) EPosition::NUM; ++i) {
+        if (from == state.TrickPlayer || !state.Cards[(ui32) from].Empty()) {
+            return from;
+        }
+
+        from = NextPosition(from);
+    }
+
+    return EPosition::INVALID;
+}
+
+void DoneAction(TInnerState& state, EPosition pos) {
+    if (!state.Cards[(ui32) pos].Empty()) {
+        return;
+    }
+
+    if (!ValidatePosition(state.DonePlayer)) {
+        state.DonePlayer = pos;
+    }
+}
+
+void MoveAction(TInnerState& state, TEvMove ev) {
+    state.Cards[(ui32) ev.Who].Rm(ev.Comb.AsCards());
+
+    state.ActiveCards.Join(ev.Comb.AsCards());
+    state.LastComb = state.LastComb.Combine(ev.Comb);
+
+    state.TrickPlayer = ev.Who;
+    state.ActivePlayer = NextActive(state, NextPosition(ev.Who));
+
+    DoneAction(state, ev.Who);
+}
+
+void TrickAction(TInnerState& state, EPosition takes) {
+    state.Trick[(ui32) takes].Join(state.ActiveCards);
+
+    state.ActiveCards.Drop();
+    state.LastComb.Drop();
+    state.TrickPlayer = EPosition::INVALID;
+
+    state.ActivePlayer = NextActive(state, state.ActivePlayer);
+}
+
+bool TrickCheck(const TInnerState& state) {
+    return NextActive(state, NextPosition(state.ActivePlayer)) == state.TrickPlayer;
+}
+
+bool LastDragon(const TInnerState& state) {
+    return state.LastComb.AsCards() == TCard::Dragon();
+}
+
+EPosition GiveDragonTo(const TInnerState& state) {
+    auto op = OppositeTeam(Team(state.TrickPlayer));
+
+    EPosition last = EPosition::INVALID;
+
+    for (auto pos: AllPositions) {
+        if (Team(pos) == op) {
+            if (ValidatePosition(last)) {
+                return EPosition::INVALID;
+            }
+
+            last = pos;
+        }
+    }
+
+    assert(ValidatePosition(last));
+    return last;
+}
+
+TTM<TScore> UpdatedScore(const TInnerState& state) {
+    TTM<TScore> score = state.Score;
+
+    for (size_t i = 0; i < (ui32) EPosition::NUM; ++i) {
+        if (state.Call[i] == ECall::GRAND) {
+            if (i == (ui32) state.DonePlayer) {
+                score[(ui32) Team(state.DonePlayer)] += TState::GRAND_TICHU_SCORE;
+            } else {
+                score[(ui32) Team(state.DonePlayer)] -= TState::GRAND_TICHU_SCORE;
+            }
+        } else if (state.Call[i] == ECall::SMALL) {
+            if (i == (ui32) state.DonePlayer) {
+                score[(ui32) Team(state.DonePlayer)] += TState::SMALL_TICHU_SCORE;
+            } else {
+                score[(ui32) Team(state.DonePlayer)] -= TState::SMALL_TICHU_SCORE;
+            }
+        }
+    }
+
+    TTM<ui32> active{0};
+    EPosition last = EPosition::INVALID;
+    for (auto pos: AllPositions) {
+        if (!state.Cards[(ui32) pos].Empty()) {
+            ++active[(ui32) Team(pos)];
+            last = pos;
+        }
+    }
+
+    if (active[(ui32) ETeam::TEAM_0] == 2u) {
+        score[(ui32) ETeam::TEAM_1] += TState::TEAM_DONE_SCORE;
+        return score;
+    } else if (active[(ui32) ETeam::TEAM_1] == 2u) {
+        score[(ui32) ETeam::TEAM_0] += TState::TEAM_DONE_SCORE;
+        return score;
+    }
+
+    assert(ValidatePosition(last));
+
+    score[(ui32) OppositeTeam(Team(last))] += state.ActiveCards.Score();
+    score[(ui32) OppositeTeam(Team(last))] += state.Cards[(ui32) last].Score();
+    score[(ui32) Team(state.DonePlayer)] += state.Trick[(ui32) last].Score();
+
+    for (auto pos: AllPositions) {
+        if (pos != last) {
+            score[(ui32) Team(pos)] += state.Trick[(ui32) pos].Score();
+        }
+    }
+
+    return score;
+}
+
+void UpdateScore(TInnerState& state) {
+    state.Score = UpdatedScore(state);
+}
+
+bool GameOver(const TInnerState& state) {
+    auto score = UpdatedScore(state);
+
+    auto a = score[(ui32) ETeam::TEAM_0];
+    auto b = score[(ui32) ETeam::TEAM_1];
+
+    return (a >= TState::MAX_SCORE && a > b) || (b >= TState::MAX_SCORE && b > a);
+}
+
+bool RoundOver(const TInnerState& state, TEvMove ev) {
+    TTM<ui32> done{0};
+    for (auto pos: AllPositions) {
+        if (pos == ev.Who) {
+            done[(ui32) Team(pos)] += (state.Cards[(ui32) pos] == ev.Comb.AsCards());
+        } else {
+            done[(ui32) Team(pos)] += (state.Cards[(ui32) pos].Empty());
+        }
+    }
+
+    auto a = done[(ui32) ETeam::TEAM_0];
+    auto b = done[(ui32) ETeam::TEAM_1];
+
+    return a > 1 || b > 1 || a + b > 2;
 }
 
 template <EInnerState From, EInnerState To, class TEv>
@@ -239,7 +433,14 @@ SWITCH_CHECK_IMPL(NEW_ROUND, NEW_ROUND, TEvGTChoice) {
         return false;
     }
 
-    return true;
+    ui32 calls = 0;
+    for (auto pos: AllPositions) {
+        if (state.Call[(ui32) pos] != ECall::UNDEFINED) {
+            ++calls;
+        }
+    }
+
+    return calls + 1u < (ui32) EPosition::NUM;
 }
 
 SWITCH_CHECK_IMPL(NEW_ROUND, EXCHANGING, TEvGTChoice) {
@@ -247,7 +448,15 @@ SWITCH_CHECK_IMPL(NEW_ROUND, EXCHANGING, TEvGTChoice) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    ui32 calls = 0;
+    for (auto pos: AllPositions) {
+        if (state.Call[(ui32) pos] != ECall::UNDEFINED) {
+            ++calls;
+        }
+    }
+
+    return calls + 1u == (ui32) EPosition::NUM;
 }
 
 SWITCH_CHECK_IMPL(EXCHANGING, EXCHANGING, TEvExchange) {
@@ -255,7 +464,18 @@ SWITCH_CHECK_IMPL(EXCHANGING, EXCHANGING, TEvExchange) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    ui32 exchanges = 0;
+    for (auto to: AllPositions) {
+        for (auto from: AllPositions) {
+            if (state.Exchange[(ui32) from][(ui32) to].Defined()) {
+                ++exchanges;
+                break;
+            }
+        }
+    }
+
+    return exchanges + 1u < (ui32) EPosition::NUM;
 }
 
 SWITCH_CHECK_IMPL(EXCHANGING, NEW_TURN, TEvExchange) {
@@ -263,7 +483,18 @@ SWITCH_CHECK_IMPL(EXCHANGING, NEW_TURN, TEvExchange) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    ui32 exchanges = 0;
+    for (auto to: AllPositions) {
+        for (auto from: AllPositions) {
+            if (state.Exchange[(ui32) from][(ui32) to].Defined()) {
+                ++exchanges;
+                break;
+            }
+        }
+    }
+
+    return exchanges + 1u == (ui32) EPosition::NUM;
 }
 
 SWITCH_CHECK_IMPL(NEW_TURN, NEW_TURN, TEvMove) {
@@ -271,7 +502,8 @@ SWITCH_CHECK_IMPL(NEW_TURN, NEW_TURN, TEvMove) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return !RoundOver(state, ev) && ev.Comb.Ty() == ECombination::DOG;
 }
 
 SWITCH_CHECK_IMPL(NEW_TURN, TURN, TEvMove) {
@@ -279,7 +511,8 @@ SWITCH_CHECK_IMPL(NEW_TURN, TURN, TEvMove) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return !RoundOver(state, ev) && ev.Comb.Ty() != ECombination::DOG;
 }
 
 SWITCH_CHECK_IMPL(NEW_TURN, ROUND_OVER, TEvMove) {
@@ -287,7 +520,8 @@ SWITCH_CHECK_IMPL(NEW_TURN, ROUND_OVER, TEvMove) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return RoundOver(state, ev);
 }
 
 SWITCH_CHECK_IMPL(TURN, TURN, TEvMove) {
@@ -295,7 +529,8 @@ SWITCH_CHECK_IMPL(TURN, TURN, TEvMove) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return !RoundOver(state, ev);
 }
 
 SWITCH_CHECK_IMPL(TURN, ROUND_OVER, TEvMove) {
@@ -303,7 +538,8 @@ SWITCH_CHECK_IMPL(TURN, ROUND_OVER, TEvMove) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return RoundOver(state, ev);
 }
 
 SWITCH_CHECK_IMPL(TURN, TURN, TEvPass) {
@@ -311,7 +547,8 @@ SWITCH_CHECK_IMPL(TURN, TURN, TEvPass) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return !TrickCheck(state);
 }
 
 SWITCH_CHECK_IMPL(TURN, TRICK, TEvPass) {
@@ -319,7 +556,8 @@ SWITCH_CHECK_IMPL(TURN, TRICK, TEvPass) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return TrickCheck(state) && (!LastDragon(state) || ValidatePosition(GiveDragonTo(state)));
 }
 
 SWITCH_CHECK_IMPL(TURN, GIVE_DRAGON, TEvPass) {
@@ -327,30 +565,32 @@ SWITCH_CHECK_IMPL(TURN, GIVE_DRAGON, TEvPass) {
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
-    return true;
+
+    return TrickCheck(state) && LastDragon(state) && !ValidatePosition(GiveDragonTo(state));
 }
 
 SWITCH_CHECK_IMPL(ROUND_OVER, NEW_ROUND, TEvNone) {
     assert(VALIDATE_STATE(ROUND_OVER)(state));
 
-    return true;
+    return !GameOver(state);
 }
 
 SWITCH_CHECK_IMPL(ROUND_OVER, GAME_OVER, TEvNone) {
     assert(VALIDATE_STATE(ROUND_OVER)(state));
-    return true;
+    return GameOver(state);
 }
 
-SWITCH_CHECK_IMPL(TRICK, NEW_ROUND, TEvNone) {
+SWITCH_CHECK_IMPL(TRICK, NEW_TURN, TEvNone) {
     assert(VALIDATE_STATE(TRICK)(state));
     return true;
 }
 
-SWITCH_CHECK_IMPL(GIVE_DRAGON, NEW_ROUND, TEvGiveDragon) {
+SWITCH_CHECK_IMPL(GIVE_DRAGON, NEW_TURN, TEvGiveDragon) {
     assert(VALIDATE_STATE(GIVE_DRAGON)(state));
     if (!VALIDATE_EVENT(ev, state)) {
         return false;
     }
+
     return true;
 }
 
@@ -365,23 +605,47 @@ SWITCH_CHECK_IMPL(GIVE_DRAGON, NEW_ROUND, TEvGiveDragon) {
 SWITCH_IMPL(NOT_INITIALIZED, NEW_ROUND, TEvNone) {
     assert(SWITCH_CHECK(NOT_INITIALIZED, NEW_ROUND)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_ROUND));
+    for (auto& cards: state.Cards) {
+        cards = state.Generator->Generate(TState::CARDS_INIT);
+    }
+
+    assert(VALIDATE_STATE(NEW_ROUND)(state));
 }
 
 SWITCH_IMPL(NEW_ROUND, NEW_ROUND, TEvGTChoice) {
     assert(SWITCH_CHECK(NEW_ROUND, NEW_ROUND)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_ROUND));
+    if (ev.Choice) {
+        state.Call[(ui32) ev.Who] = ECall::GRAND;
+    } else {
+        state.Call[(ui32) ev.Who] = ECall::NONE;
+    }
+
+    assert(VALIDATE_STATE(NEW_ROUND)(state));
 }
 
 SWITCH_IMPL(NEW_ROUND, EXCHANGING, TEvGTChoice) {
     assert(SWITCH_CHECK(NEW_ROUND, EXCHANGING)(ev, state));
 
-    assert(VALIDATE_STATE(EXCHANGING));
+    if (ev.Choice) {
+        state.Call[(ui32) ev.Who] = ECall::GRAND;
+    } else {
+        state.Call[(ui32) ev.Who] = ECall::NONE;
+    }
+
+    for (auto& cards: state.Cards) {
+        cards.Join(state.Generator->Generate(TState::CARDS_TOTAL - TState::CARDS_INIT));
+    }
+
+    assert(VALIDATE_STATE(EXCHANGING)(state));
 }
 
 SWITCH_IMPL(EXCHANGING, EXCHANGING, TEvExchange) {
     assert(SWITCH_CHECK(EXCHANGING, EXCHANGING)(ev, state));
+
+    for (size_t i = 0; i < (ui32) EPosition::NUM; ++i) {
+        state.Exchange[i][(ui32) ev.Who] = ev.Exchange[i];
+    }
 
     assert(VALIDATE_STATE(EXCHANGING));
 }
@@ -389,79 +653,134 @@ SWITCH_IMPL(EXCHANGING, EXCHANGING, TEvExchange) {
 SWITCH_IMPL(EXCHANGING, NEW_TURN, TEvExchange) {
     assert(SWITCH_CHECK(EXCHANGING, NEW_TURN)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_TURN));
+    for (size_t i = 0; i < (ui32) EPosition::NUM; ++i) {
+        state.Exchange[i][(ui32) ev.Who] = ev.Exchange[i];
+    }
+
+    for (size_t to = 0; to < (ui32) EPosition::NUM; ++to) {
+        for (size_t from = 0; from < (ui32) EPosition::NUM; ++from) {
+            if (from != to) {
+                state.Cards[from].Rm(state.Exchange[to][from]);
+                state.Cards[to].Join(state.Exchange[to][from]);
+            }
+        }
+    }
+
+    for (size_t i = 0; i < (ui32) EPosition::NUM; ++i) {
+        if (state.Cards[i].Has(TCard::MahJong())) {
+            state.ActivePlayer = (EPosition) i;
+            break;
+        }
+    }
+
+    assert(VALIDATE_STATE(NEW_TURN)(state));
 }
 
 SWITCH_IMPL(NEW_TURN, NEW_TURN, TEvMove) {
     assert(SWITCH_CHECK(NEW_TURN, NEW_TURN)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_TURN));
+    state.Cards[(ui32) ev.Who].Rm(ev.Comb.AsCards());
+    state.Trick[(ui32) ev.Who].Join(ev.Comb.AsCards());
+
+    DoneAction(state, ev.Who);
+
+    state.ActivePlayer = NextActive(state, Teammate(ev.Who));
+
+    assert(VALIDATE_STATE(NEW_TURN)(state));
 }
 
 SWITCH_IMPL(NEW_TURN, TURN, TEvMove) {
     assert(SWITCH_CHECK(NEW_TURN, TURN)(ev, state));
 
-    assert(VALIDATE_STATE(TURN));
+    MoveAction(state, ev);
+
+    assert(VALIDATE_STATE(TURN)(state));
 }
 
 SWITCH_IMPL(NEW_TURN, ROUND_OVER, TEvMove) {
     assert(SWITCH_CHECK(NEW_TURN, ROUND_OVER)(ev, state));
 
-    assert(VALIDATE_STATE(ROUND_OVER));
+    MoveAction(state, ev);
+
+    assert(VALIDATE_STATE(ROUND_OVER)(state));
 }
 
 SWITCH_IMPL(TURN, TURN, TEvMove) {
     assert(SWITCH_CHECK(TURN, TURN)(ev, state));
 
-    assert(VALIDATE_STATE(TURN));
+    MoveAction(state, ev);
+
+    assert(VALIDATE_STATE(TURN)(state));
 }
 
 SWITCH_IMPL(TURN, ROUND_OVER, TEvMove) {
     assert(SWITCH_CHECK(TURN, ROUND_OVER)(ev, state));
 
-    assert(VALIDATE_STATE(ROUND_OVER));
+    MoveAction(state, ev);
+
+    assert(VALIDATE_STATE(ROUND_OVER)(state));
 }
 
 SWITCH_IMPL(TURN, TURN, TEvPass) {
     assert(SWITCH_CHECK(TURN, TURN)(ev, state));
 
-    assert(VALIDATE_STATE(TURN));
+    state.ActivePlayer = NextActive(state, NextPosition(ev.Who));
+
+    assert(VALIDATE_STATE(TURN)(state));
 }
 
 SWITCH_IMPL(TURN, TRICK, TEvPass) {
     assert(SWITCH_CHECK(TURN, TRICK)(ev, state));
 
-    assert(VALIDATE_STATE(TRICK));
+    state.ActivePlayer = NextActive(state, NextPosition(ev.Who));
+
+    assert(VALIDATE_STATE(TRICK)(state));
 }
 
 SWITCH_IMPL(TURN, GIVE_DRAGON, TEvPass) {
     assert(SWITCH_CHECK(TURN, GIVE_DRAGON)(ev, state));
 
-    assert(VALIDATE_STATE(GIVE_DRAGON));
+    state.ActivePlayer = NextActive(state, NextPosition(ev.Who));
+
+    assert(VALIDATE_STATE(GIVE_DRAGON)(state));
 }
 
 SWITCH_IMPL(ROUND_OVER, NEW_ROUND, TEvNone) {
     assert(SWITCH_CHECK(ROUND_OVER, NEW_ROUND)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_ROUND));
+    UpdateScore(state);
+    state.ResetRound();
+
+    for (auto pos: AllPositions) {
+        state.Cards[(ui32) pos] = state.Generator->Generate(TState::CARDS_INIT);
+    }
+
+    assert(VALIDATE_STATE(NEW_ROUND)(state));
 }
 
 SWITCH_IMPL(ROUND_OVER, GAME_OVER, TEvNone) {
     assert(SWITCH_CHECK(ROUND_OVER, GAME_OVER)(ev, state));
 
-    assert(VALIDATE_STATE(GAME_OVER));
+    UpdateScore(state);
+    state.ResetRound();
+
+    assert(VALIDATE_STATE(GAME_OVER)(state));
 }
 
-SWITCH_IMPL(TRICK, NEW_ROUND, TEvNone) {
-    assert(SWITCH_CHECK(TRICK, NEW_ROUND)(ev, state));
+SWITCH_IMPL(TRICK, NEW_TURN, TEvNone) {
+    assert(SWITCH_CHECK(TRICK, NEW_TURN)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_ROUND));
+    TrickAction(state, LastDragon(state) ? GiveDragonTo(state): state.ActivePlayer);
+
+    assert(VALIDATE_STATE(NEW_TURN)(state));
 }
 
-SWITCH_IMPL(GIVE_DRAGON, NEW_ROUND, TEvGiveDragon) {
-    assert(SWITCH_CHECK(GIVE_DRAGON, NEW_ROUND)(ev, state));
+SWITCH_IMPL(GIVE_DRAGON, NEW_TURN, TEvGiveDragon) {
+    assert(SWITCH_CHECK(GIVE_DRAGON, NEW_TURN)(ev, state));
 
-    assert(VALIDATE_STATE(NEW_ROUND));
+    TrickAction(state, ev.To);
+
+    assert(VALIDATE_STATE(NEW_TURN)(state));
 }
 
 /*
@@ -613,6 +932,8 @@ TStateErrorOr TState::Advance(TEv ev) {
             assert(false);
         }
     }
+
+    return TStateError{TStateError::UNKNOWN};
 }
 
 } // namespace NTichu::NGameplay::NState

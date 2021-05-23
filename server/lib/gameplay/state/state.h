@@ -46,6 +46,7 @@ public:
     virtual TStateErrorOr GiveDragon(TEvGiveDragon) = 0;
 
     virtual TSnapshot Snapshot(EPosition pos) const = 0;
+    virtual EState State() const = 0;
 
     virtual ~IState() = default;
 };

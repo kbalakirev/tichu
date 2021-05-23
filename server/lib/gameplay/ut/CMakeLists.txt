@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.8)
 
 find_package(GTest CONFIG)
 
-add_executable(gameplay-ut ut.cpp cards_ut.cpp)
+add_executable(gameplay-ut ut.cpp cards_ut.cpp state_ut.cpp)
 
 target_link_libraries(gameplay-ut GTest::gtest gameplay)
 

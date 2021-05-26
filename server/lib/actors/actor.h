@@ -51,7 +51,7 @@ private:
 class TEventBase;
 using TEventPtr = std::shared_ptr<TEventBase>;
 
-class TEventBase: public std::enable_shared_from_this<TEventBase> {
+class TEventBase {
     friend class IActor;
     friend class TActorSystem;
 

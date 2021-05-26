@@ -6,6 +6,8 @@
 namespace NTichu::NGameplay::NState {
 
 struct TSnapshot {
+    EState State;
+
     NCards::TCards Cards;
     TPM<ui8> CardsCount;
 

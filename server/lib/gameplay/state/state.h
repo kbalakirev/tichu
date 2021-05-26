@@ -1,5 +1,6 @@
 #pragma once
 
+#include "defs.h"
 #include "events.h"
 #include "snapshot.h"
 
@@ -21,19 +22,6 @@ struct TStateError {
 };
 
 using TStateErrorOr = TErrorOr<void, TStateError>;
-
-enum class EState {
-    NOT_INITIALIZED = 0,
-    NEW_ROUND,
-    EXCHANGING,
-    GAME_OVER,
-    NEW_TURN,
-    TURN,
-    GIVE_DRAGON,
-
-    NUM,
-    INVALID
-};
 
 class IState {
 public:

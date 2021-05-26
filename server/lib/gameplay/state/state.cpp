@@ -131,7 +131,22 @@ private:
     }
 
     TSnapshot Snapshot(EPosition pos) const override {
-        return TSnapshot();
+        TSnapshot snapshot {
+            .Score = State_.Score,
+            .Cards = State_.Cards[(ui32) pos],
+            .State = State(),
+            .Exchange = State_.Exchange[(ui32) pos],
+            .TrickPlayer = State_.TrickPlayer,
+            .ActivePlayer = State_.ActivePlayer,
+            .LastComb = State_.LastComb,
+            .Calls = State_.Call,
+        };
+
+        for (auto pos: AllPositions) {
+            snapshot.CardsCount[(ui32) pos] = State_.Cards[(ui32) pos].Num();
+        }
+
+        return snapshot;
     }
 
     EState State() const override {

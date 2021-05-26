@@ -6,6 +6,19 @@
 
 namespace NTichu::NGameplay::NState {
 
+enum class EState {
+    NOT_INITIALIZED = 0,
+    NEW_ROUND,
+    EXCHANGING,
+    GAME_OVER,
+    NEW_TURN,
+    TURN,
+    GIVE_DRAGON,
+
+    NUM,
+    INVALID
+};
+
 enum class ECall {
     UNDEFINED = 0,
     GRAND,

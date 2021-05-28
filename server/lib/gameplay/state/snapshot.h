@@ -18,7 +18,7 @@ struct TSnapshot {
 
     TPM<ECall> Calls;
 
-    TPM<TPM<NCards::TCard>> Exchange;
+    TPM<NCards::TCard> Exchange;
 
     NCards::TCombination LastComb;
 

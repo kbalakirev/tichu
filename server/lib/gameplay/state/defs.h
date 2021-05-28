@@ -1,10 +1,23 @@
 #pragma once
 
 #include <server/lib/types/types.h>
+#include <server/lib/error_or/error_or.h>
 
 #include <array>
+#include <string>
 
 namespace NTichu::NGameplay::NState {
+
+struct TStateError {
+    enum EType {
+        UNKNOWN
+    };
+
+    EType Type;
+    std::string Message = "";
+};
+
+using TStateErrorOr = TErrorOr<void, TStateError>;
 
 enum class EState {
     NOT_INITIALIZED = 0,

@@ -130,16 +130,20 @@ private:
         return Advance(exchange);
     }
 
+    TStateErrorOr Call(TEvCall call) override {
+        return TStateError(TStateError::UNKNOWN, "unsupported action");
+    }
+
     TSnapshot Snapshot(EPosition pos) const override {
         TSnapshot snapshot {
-            .Score = State_.Score,
-            .Cards = State_.Cards[(ui32) pos],
             .State = State(),
-            .Exchange = State_.Exchange[(ui32) pos],
-            .TrickPlayer = State_.TrickPlayer,
+            .Cards = State_.Cards[(ui32) pos],
             .ActivePlayer = State_.ActivePlayer,
-            .LastComb = State_.LastComb,
+            .TrickPlayer = State_.TrickPlayer,
+            .Score = State_.Score,
             .Calls = State_.Call,
+            .Exchange = State_.Exchange[(ui32) pos],
+            .LastComb = State_.LastComb
         };
 
         for (auto pos: AllPositions) {

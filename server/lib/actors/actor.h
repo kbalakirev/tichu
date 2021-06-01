@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <chrono>
+#include <vector>
 #include <type_traits>
 #include <functional>
 
@@ -69,6 +70,22 @@ private:
 
 template <class T>
 class TEvent: public TEventBase {
+public:
+    using TPtr = std::shared_ptr<T>;
+};
+
+class TBufEventBase: public TEventBase {
+public:
+    TWeakActor Top() const;
+    void Pop();
+    void Push(TWeakActor sender);
+
+private:
+    std::vector<TWeakActor> CallStack_;
+};
+
+template <class T>
+class TBufEvent: public TBufEventBase {
 public:
     using TPtr = std::shared_ptr<T>;
 };

@@ -59,5 +59,23 @@ void TActorSystem::Send(TWeakActor from, TWeakActor to, TEventPtr ev) {
     caf::send_as(caf::actor_cast<caf::actor>(from.Actor_), caf::actor_cast<caf::actor>(to.Actor_), std::move(ev));
 }
 
+void TBufEventBase::Pop() {
+    if (!CallStack_.empty()) {
+        CallStack_.pop_back();
+    }
+}
+
+TWeakActor TBufEventBase::Top() const {
+    if (!CallStack_.empty()) {
+        return CallStack_.back();
+    }
+
+    return TWeakActor{};
+}
+
+void TBufEventBase::Push(TWeakActor sender) {
+    CallStack_.emplace_back(std::move(sender));
+}
+
 } // namespace NActors
 

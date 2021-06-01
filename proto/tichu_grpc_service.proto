@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package tichu;
+
+service TTichuGrpcService {
+    rpc JoinAnyTable(TJoinAnyReq) returns (TJoinResp);
+
+    rpc Register(TRegisterReq) returns (TRegisterResp);
+
+    rpc Act(TAction) returns (TActionResp);
+
+    rpc Subscribe(TSubscribeReq) returns (stream TGameSnapshot);
+}
+
+enum EValue {
+    DOG_VALUE = 0;
+    MAH_JONG_VALUE = 1;
+    PHOENIX_VALUE = 2;
+    TWO_VALUE = 4;
+    THREE_VALUE = 8;
+    FOUR_VALUE = 12;
+    FIVE_VALUE = 16;
+    SIX_VALUE = 20;
+    SEVEN_VALUE = 24;
+    EIGHT_VALUE = 28;
+    NINE_VALUE = 32;
+    TEN_VALUE = 36;
+    JACK_VALUE = 40;
+    QUEEN_VALUE = 44;
+    KING_VALUE = 48;
+    ACE_VALUE = 52;
+    DRAGON_VALUE = 56;
+}
+
+enum ESuit {
+    JACK_SUIT = 0;
+    SWORD_SUIT = 1;
+    PAGODA_SUIT = 2;
+    STAR_SUIT = 3;
+}
+
+message TCard {
+    EValue Value = 1;
+    ESuit Suit = 2;
+}
+
+message TCombination {
+    repeated TCard Cards = 1;
+    EValue PhoenixReplace = 2;
+}
+
+enum EPosition {
+    UNDEFINED_POS = 0;
+    POS_1 = 1;
+    POS_2 = 2;
+    POS_3 = 3;
+    POS_4 = 4;
+}
+
+enum ETeam {
+    UNDEFINED_TEAM = 0;
+    TEAM_1 = 1;
+    TEAM_2 = 2;
+}
+
+enum EGameState {
+    INVALID = 0;
+    NOT_INITIALIZED = 1;
+    EXCHANGING = 2;
+    GAME_OVER = 3;
+    NEW_TURN = 4;
+    TURN = 5;
+    GIVE_DRAGON = 6;
+}
+
+message TTableId {
+    uint64 Identity = 1;
+    uint64 Tag = 2;
+}
+
+message TJoinAnyReq {
+}
+
+message TJoinResp {
+    enum EJoinStatus {
+        OK = 0;
+        ERROR = 1;
+    }
+
+    TTableId Table = 1;
+    EPosition Position = 2;
+
+    EJoinStatus Status = 3;
+    string Message = 4;
+}
+
+message TGTChoice {
+    bool Choice = 1;
+}
+
+message TExchangeItem {
+    EPosition Player = 1;
+    TCard Card = 2;
+}
+
+message TExchange {
+    repeated TExchangeItem Exchange = 1;
+}
+
+message TCall {
+}
+
+message TPass {
+}
+
+message TMove {
+    TCombination Combination = 1;
+}
+
+message TGiveDragon {
+    EPosition To = 2;
+}
+
+message TAction {
+    oneof Action {
+        TGTChoice GTChoice = 1;
+        TExchange Exchange = 2;
+        TCall Call = 4;
+        TPass Pass = 5;
+        TMove Move = 6;
+        TGiveDragon PassDragon = 7;
+    }
+}
+
+message TActionResp {
+    enum EActionStatus {
+        OK = 0;
+        ERROR = 1;
+    }
+
+    EActionStatus Status = 1;
+    string Message = 2;
+}
+
+message TCardsCountItem {
+    EPosition Player = 1;
+    uint32 Count = 2;
+}
+
+message TScore {
+    int32 Team_0 = 1;
+    int32 Team_1 = 2;
+}
+
+message TCallItem {
+    enum ECallType {
+        UNDEFINED = 0;
+        SMALL = 1;
+        GRAND = 2;
+        NONE = 3;
+    }
+
+    EPosition Player = 1;
+    ECallType Type = 2;
+}
+
+message TGameSnapshot {
+    EGameState State = 1;
+    repeated TCard Cards = 2;
+    repeated TCardsCountItem CardsCount = 3;
+
+    EPosition ActivePlayer = 4;
+    EPosition TrickPlayer = 5;
+
+    TScore Score = 6;
+
+    repeated TCallItem Calls = 7;
+    TExchange Exchange = 8;
+
+    TCombination LastComb = 9;
+
+    TAction LastAction = 10;
+}
+
+message TAuthToken {
+    string Token = 1;
+}
+
+message TRegisterReq {
+}
+
+message TRegisterResp {
+    TAuthToken Token = 1;
+}
+
+message TSubscribeReq {
+}

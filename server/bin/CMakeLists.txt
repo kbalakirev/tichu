@@ -4,7 +4,7 @@ project(TICHU_SERVER)
 
 include(../../cmake/common.cmake)
 
-get_filename_component(tichu_proto "../proto/tichu_grpc_service.proto" ABSOLUTE)
+get_filename_component(tichu_proto "../../proto/tichu_grpc_service.proto" ABSOLUTE)
 get_filename_component(tichu_proto_path "${tichu_proto}" PATH)
 
 set(tichu_proto_srcs "${CMAKE_CURRENT_BINARY_DIR}/tichu_grpc_service.pb.cc")

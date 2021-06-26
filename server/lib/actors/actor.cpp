@@ -8,6 +8,7 @@ TWeakActor TEventBase::Sender() const {
 
 IActor::IActor(TActorConfig& config)
     : TBase(config)
+    , Holder_(new THolder{caf::actor_cast<caf::actor>(address())})
 {
 }
 
@@ -16,6 +17,7 @@ TWeakActor IActor::Self() const {
 }
 
 void IActor::Quit() {
+    delete Holder_;
     quit();
 }
 

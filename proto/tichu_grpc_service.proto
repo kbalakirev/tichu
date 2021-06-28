@@ -9,7 +9,11 @@ service TTichuGrpcService {
 
     rpc Act(TAction) returns (TActionResp);
 
-    rpc Subscribe(TSubscribeReq) returns (stream TGameSnapshot);
+    rpc TableStream(TTableStreamReq) returns (stream TGameSnapshot);
+}
+
+message TAuthToken {
+    string Token = 1;
 }
 
 enum EValue {
@@ -75,10 +79,10 @@ enum EGameState {
 
 message TTableId {
     uint64 Identity = 1;
-    uint64 Tag = 2;
 }
 
 message TJoinAnyReq {
+    TAuthToken Token;
 }
 
 message TJoinResp {
@@ -122,9 +126,10 @@ message TGiveDragon {
 }
 
 message TAction {
+    TAuthToken Token = 1;
     oneof Action {
-        TGTChoice GTChoice = 1;
-        TExchange Exchange = 2;
+        TGTChoice GTChoice = 2;
+        TExchange Exchange = 3;
         TCall Call = 4;
         TPass Pass = 5;
         TMove Move = 6;
@@ -182,10 +187,6 @@ message TGameSnapshot {
     TAction LastAction = 10;
 }
 
-message TAuthToken {
-    string Token = 1;
-}
-
 message TRegisterReq {
 }
 
@@ -193,5 +194,6 @@ message TRegisterResp {
     TAuthToken Token = 1;
 }
 
-message TSubscribeReq {
+message TTableStreamReq {
+    TAuthToken Token = 1;
 }

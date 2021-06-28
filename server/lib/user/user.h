@@ -11,35 +11,25 @@
 
 namespace NTichu::NServer {
 
-struct TUserId {
-    ui64 Identity;
-    ui64 Tag;
-};
+using TUserId = ui64;
 
-struct TUserEv {
-    struct TProxy: NActors::TBufEvent<TProxy> {
+namespace NEvUserManager {
+    struct TProxy: NActors::TEvent<TProxy> {
         TProxy(TUserId userId, NActors::TEventPtr event)
-            : UserId(userId)
-            , Event(std::move(event))
+                : UserId(userId)
+                , Event(std::move(event))
         {
         }
 
         TUserId UserId;
         NActors::TEventPtr Event;
     };
-};
-
-inline bool operator==(TUserId lhs, TUserId rhs) {
-    return lhs.Identity == rhs.Identity && lhs.Tag == rhs.Tag;
 }
 
-NActors::TWeakActor CreateUserManager(NActors::TActorSystem sys, NActors::TWeakActor tableManager);
+struct TUserManagerOptions {
+    NActors::TActorId TableManager;
+};
+
+NActors::TActorId CreateUserManager(TUserManagerOptions options);
 
 } // namespace NTichu::NServer
-
-template <>
-struct std::hash<NTichu::NServer::TUserId> {
-    ui64 operator()(NTichu::NServer::TUserId userId) const {
-        return std::hash<ui64>()(userId.Identity) ^ std::hash<ui64>()(userId.Tag);
-    }
-};

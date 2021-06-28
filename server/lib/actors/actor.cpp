@@ -2,7 +2,7 @@
 
 namespace NActors {
 
-TWeakActor TEventBase::Sender() const {
+TActorId TEventBase::Sender() const {
     return Sender_;
 }
 
@@ -12,7 +12,7 @@ IActor::IActor(TActorConfig& config)
 {
 }
 
-TWeakActor IActor::Self() const {
+TActorId IActor::Self() const {
     return address();
 }
 
@@ -33,7 +33,7 @@ TActorSystem IActor::System() {
     return TActorSystem(home_system());
 }
 
-void IActor::Send(NActors::TWeakActor to, NActors::TEventPtr ev) {
+void IActor::Send(NActors::TActorId to, NActors::TEventPtr ev) {
     if (ev) {
         ev->Sender_ = Self();
     }
@@ -41,7 +41,7 @@ void IActor::Send(NActors::TWeakActor to, NActors::TEventPtr ev) {
     send(caf::actor_cast<caf::actor>(to.Actor_), std::move(ev));
 }
 
-void IActor::Schedule(NActors::TWeakActor to, NActors::TEventPtr ev, TDuration delay) {
+void IActor::Schedule(NActors::TActorId to, NActors::TEventPtr ev, TDuration delay) {
     if (ev) {
         ev->Sender_ = Self();
     }
@@ -54,29 +54,11 @@ TActorSystem::TActorSystem(caf::actor_system& sys)
 {
 }
 
-void TActorSystem::Send(TWeakActor from, TWeakActor to, TEventPtr ev) {
+void TActorSystem::Send(TActorId from, TActorId to, TEventPtr ev) {
     if (ev) {
         ev->Sender_ = from;
     }
     caf::send_as(caf::actor_cast<caf::actor>(from.Actor_), caf::actor_cast<caf::actor>(to.Actor_), std::move(ev));
-}
-
-void TBufEventBase::Pop() {
-    if (!CallStack_.empty()) {
-        CallStack_.pop_back();
-    }
-}
-
-TWeakActor TBufEventBase::Top() const {
-    if (!CallStack_.empty()) {
-        return CallStack_.back();
-    }
-
-    return TWeakActor{};
-}
-
-void TBufEventBase::Push(TWeakActor sender) {
-    CallStack_.emplace_back(std::move(sender));
 }
 
 } // namespace NActors

@@ -6,11 +6,12 @@ using namespace NActors;
 
 namespace NTichu::NServer {
 
+using namespace NEvAuthorizer;
+
 class TAuthorizer: public IActor {
 public:
-    explicit TAuthorizer(TActorConfig& config, TWeakActor userManager)
+    explicit TAuthorizer(TActorConfig& config)
         : IActor(config)
-        , UserManager_(std::move(userManager))
     {
         auto now = std::chrono::system_clock::now();
         Tag = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
@@ -19,39 +20,38 @@ public:
 private:
     TAuthToken GenerateToken() {
         ++Initializer;
-        return TAuthToken{Initializer, Tag};
+
+        TAuthToken token;
+        token.resize(sizeof(ui64) + sizeof(ui64));
+        std::memcpy(token.data(), &Tag, sizeof(ui64));
+        std::memcpy(token.data() + sizeof(ui64), &Initializer, sizeof(ui64));
+
+        return token;
     }
 
-    void OnProxyReq(TAuthEv::TProxyReq::TPtr event) {
-        auto ptr = AuthTable_.find(event->Token);
+    void OnProxyReq(TProxyReq::TPtr ev) {
+        auto ptr = AuthTable_.find(ev->Token);
 
         if (ptr == AuthTable_.end()) {
-            Send(event->Sender(), MakeEvent<TAuthEv::TProxyError>("invalid auth token"));
+            Send(ev->Sender(), MakeEvent<TProxyError>("invalid auth token"));
             return;
         }
 
-        TActorSystem::Send(
-                event->Sender(),
-                UserManager_,
-                MakeEvent<TUserEv::TProxy>(ptr->second, std::move(event->Event))
-            );
+        TActorSystem::Send(ev->Sender(), ev->To, ev->Event);
     }
 
-    void OnRegisterReq(TAuthEv::TRegisterReq::TPtr ev) {
+    void OnRegisterReq(TRegisterReq::TPtr ev) {
         auto token = GenerateToken();
-        auto userId = TUserId {
-            .Identity = token.Identity,
-            .Tag = token.Tag
-        };
+        TUserId userId = Initializer;
 
         AuthTable_.emplace(std::make_pair(token, userId));
 
-        Send(ev->Sender(), MakeEvent<TAuthEv::TRegisterResp>(token));
+        Send(ev->Sender(), MakeEvent<TRegisterResp>(token));
     }
 
     CREATE_STATE_FUNC(StateWork) {
-        CREATE_HANDLER(TAuthEv::TProxyReq, OnProxyReq);
-        CREATE_HANDLER(TAuthEv::TRegisterReq, OnRegisterReq);
+        CREATE_HANDLER(TProxyReq, OnProxyReq);
+        CREATE_HANDLER(TRegisterReq, OnRegisterReq);
     }
 
     THandler Bootstrap() override {
@@ -59,15 +59,15 @@ private:
     }
 
 private:
-    TWeakActor UserManager_;
-    std::unordered_map<TAuthToken, TUserId> AuthTable_;
+    using TTable = std::unordered_map<TAuthToken , TUserId>;
+    TTable AuthTable_;
 
     ui64 Initializer{0};
     ui64 Tag{0};
 };
 
-NActors::TWeakActor CreateAuthorizer(NActors::TActorSystem sys, NActors::TWeakActor userManager) {
-    return sys.Spawn<TAuthorizer>(std::move(std::move(userManager)));
+NActors::TActorId CreateAuthorizer() {
+    return TActorSystem::Instance().Spawn<TAuthorizer>();
 }
 
 } // namespace NTichu::NServer

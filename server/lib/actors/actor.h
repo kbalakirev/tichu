@@ -32,16 +32,16 @@ using TDuration = std::chrono::duration<ui64>;
 class TActorSystem;
 class IActor;
 
-class TWeakActor {
+class TActorId {
 public:
-    TWeakActor() = default;
+    TActorId() = default;
 
 private:
     friend class IActor;
     friend class TActorSystem;
 
     template <class TActorType>
-    TWeakActor(TActorType actor)
+    TActorId(TActorType actor)
         : Actor_(caf::actor_cast<caf::weak_actor_ptr>(actor))
     {
     }
@@ -62,30 +62,14 @@ class TEventBase {
 public:
     virtual ~TEventBase() = default;
 
-    TWeakActor Sender() const;
+    TActorId Sender() const;
 
 private:
-    TWeakActor Sender_;
+    TActorId Sender_;
 };
 
 template <class T>
 class TEvent: public TEventBase {
-public:
-    using TPtr = std::shared_ptr<T>;
-};
-
-class TBufEventBase: public TEventBase {
-public:
-    TWeakActor Top() const;
-    void Pop();
-    void Push(TWeakActor sender);
-
-private:
-    std::vector<TWeakActor> CallStack_;
-};
-
-template <class T>
-class TBufEvent: public TBufEventBase {
 public:
     using TPtr = std::shared_ptr<T>;
 };
@@ -105,8 +89,8 @@ protected:
 
     explicit IActor(TActorConfig& config);
 
-    void Send(TWeakActor to, TEventPtr ev);
-    void Schedule(TWeakActor to, TEventPtr ev, TDuration delay);
+    void Send(TActorId to, TEventPtr ev);
+    void Schedule(TActorId to, TEventPtr ev, TDuration delay);
 
     virtual THandler Bootstrap() = 0;
 
@@ -114,7 +98,7 @@ protected:
 
     void Quit();
 
-    TWeakActor Self() const;
+    TActorId Self() const;
 
     TActorSystem System();
 
@@ -133,16 +117,21 @@ public:
     explicit TActorSystem(caf::actor_system& sys);
 
     template <class TActor, class... TArgs>
-    TWeakActor Spawn(TArgs... args);
+    TActorId Spawn(TArgs... args);
 
-    static void Send(TWeakActor from, TWeakActor to, TEventPtr ev);
+    static void Send(TActorId from, TActorId to, TEventPtr ev);
+
+    static TActorSystem Instance(caf::actor_system* sys = nullptr) {
+        static TActorSystem system(*sys);
+        return system;
+    }
 
 private:
     caf::actor_system& Sys_;
 };
 
 template <class TActor, class... TArgs>
-TWeakActor TActorSystem::Spawn(TArgs... args) {
+TActorId TActorSystem::Spawn(TArgs... args) {
     return Sys_.spawn<TActor>(std::forward<TArgs>(args)...);
 }
 
@@ -158,6 +147,7 @@ CAF_ALLOW_UNSAFE_MESSAGE_TYPE(NActors::TEventPtr)
 
 #define ACTORS_MAIN() \
     void caf_main(caf::actor_system& sys) { \
-        ActorsMain(NActors::TActorSystem(sys)); \
+        TActorSystem::Instance(&sys) \
+        ActorsMain(); \
     } \
     CAF_MAIN(caf::id_block::BASE)

@@ -9,9 +9,11 @@
 #include <cassert>
 
 using namespace NActors;
-using namespace NTichu::NGameplay::NState;
 
 namespace NTichu::NServer {
+
+using namespace NEvTableManager;
+using namespace NGameplay;
 
 template <class TPlayer>
 class TTableMembership {
@@ -20,10 +22,10 @@ public:
         return ValidatePosition(FindPosition());
     }
 
-    EPosition Join(TPlayer player) {
+    NState::EPosition Join(TPlayer player) {
         assert(!Complete());
 
-        EPosition pos = FindPosition();
+        NState::EPosition pos = FindPosition();
 
         PosMap_.Store((ui8) pos);
         Membership[(ui8) pos] = std::move(player);
@@ -31,26 +33,26 @@ public:
         return pos;
     }
 
-    TPlayer Member(EPosition pos) const {
+    TPlayer Member(NState::EPosition pos) const {
         assert(PosMap_.Stored((ui8) pos));
 
         return Membership[(ui8) pos];
     }
 
 private:
-    EPosition FindPosition() const {
-        for (auto pos: AllPositions) {
+    NState::EPosition FindPosition() const {
+        for (auto pos: NState::AllPositions) {
             if (!PosMap_.Stored((ui8) pos)) {
                 return pos;
             }
         }
 
-        return EPosition::INVALID;
+        return NState::EPosition::INVALID;
     }
 
 private:
     TFlags PosMap_;
-    std::array<TPlayer, (ui32) EPosition::NUM> Membership;
+    std::array<TPlayer, (ui32) NState::EPosition::NUM> Membership;
 };
 
 class TTableManager: public IActor {
@@ -58,18 +60,16 @@ public:
     explicit TTableManager(TActorConfig& config)
         : IActor(config)
     {
-        auto now = std::chrono::system_clock::now();
-        Tag = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
     }
 
 private:
-    void OnAction(TTaEv::TActionReq::TPtr action) {
+    void OnAction(TActionReq::TPtr action) {
         auto ptr = Complete_.find(action->TaId);
 
         if (ptr == Complete_.end()) {
             Send(
                     action->Sender(),
-                    MakeEvent<TTaEv::TActionResp>(TStateError{TStateError::UNKNOWN, "table not found"})
+                    MakeEvent<TActionResp>(NState::TStateError{NState::TStateError::UNKNOWN, "table not found"})
                 );
 
             return;
@@ -78,23 +78,23 @@ private:
         auto& state = ptr->second;
 
         auto res = state.State->OnAction(action->Action);
-        Send(action->Sender(), MakeEvent<TTaEv::TActionResp>(std::move(res)));
+        Send(action->Sender(), MakeEvent<TActionResp>(std::move(res)));
 
         if (!res.Succeed()) {
             return;
         }
 
-        for (auto pos: AllPositions) {
+        for (auto pos: NState::AllPositions) {
             auto snapshot = state.State->Snapshot(pos);
             snapshot.LastEvent = action->Action;
-            Send(state.Membership.Member(pos), MakeEvent<TTaEv::TSnapshot>(std::move(snapshot)));
+            Send(state.Membership.Member(pos), MakeEvent<TSnapshot>(std::move(snapshot)));
         }
     }
 
-    void OnJoinAny(TTaEv::TJoinAnyReq::TPtr req) {
+    void OnJoinAny(TJoinAnyReq::TPtr req) {
         if (Pending_.empty()) {
             Pending_.emplace(
-                    std::make_pair(GenerateTableId(), TTable{{}, CreateState(CreateRandomGenerator())})
+                    std::make_pair(GenerateTableId(), TTable{{}, CreateState(NState::CreateRandomGenerator())})
                 );
         }
 
@@ -102,15 +102,15 @@ private:
 
         auto taPos = table.Membership.Join(req->Sender());
 
-        TTaEv::TJoinAnyResp resp(Pending_.begin()->first, taPos);
+        TJoinAnyResp resp(Pending_.begin()->first, taPos);
 
-        Send(req->Sender(), MakeEvent<TTaEv::TJoinAnyResp>(std::move(resp)));
+        Send(req->Sender(), MakeEvent<TJoinAnyResp>(std::move(resp)));
 
         if (table.Membership.Complete()) {
             table.State->Start();
 
-            for (auto pos: AllPositions) {
-                Send(table.Membership.Member(pos), MakeEvent<TTaEv::TSnapshot>(table.State->Snapshot(pos)));
+            for (auto pos: NState::AllPositions) {
+                Send(table.Membership.Member(pos), MakeEvent<TSnapshot>(table.State->Snapshot(pos)));
             }
 
             auto node = Pending_.extract(Pending_.begin());
@@ -119,8 +119,8 @@ private:
     }
 
     CREATE_STATE_FUNC(StateWork) {
-        CREATE_HANDLER(TTaEv::TActionReq, OnAction);
-        CREATE_HANDLER(TTaEv::TJoinAnyReq, OnJoinAny);
+        CREATE_HANDLER(TActionReq, OnAction);
+        CREATE_HANDLER(TJoinAnyReq, OnJoinAny);
     }
 
     THandler Bootstrap() override {
@@ -130,24 +130,23 @@ private:
 private:
     TTableId GenerateTableId() {
         ++Initializer;
-        return TTableId{Initializer, Tag};
+        return Initializer;
     }
 
 private:
     struct TTable {
-        TTableMembership<TWeakActor> Membership;
-        std::unique_ptr<IState> State;
+        TTableMembership<NActors::TActorId> Membership;
+        std::unique_ptr<NState::IState> State;
     };
 
     std::unordered_map<TTableId, TTable> Complete_;
     std::unordered_map<TTableId, TTable> Pending_;
 
     ui64 Initializer{0};
-    ui64 Tag;
 };
 
-NActors::TWeakActor CreateTableManager(NActors::TActorSystem sys) {
-    return sys.Spawn<TTableManager>();
+NActors::TActorId CreateTableManager() {
+    return TActorSystem::Instance().Spawn<TTableManager>();
 }
 
 } // namespace NTichu::NServer

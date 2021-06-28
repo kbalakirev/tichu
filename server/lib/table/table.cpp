@@ -63,12 +63,12 @@ public:
     }
 
 private:
-    void OnAction(TActionReq::TPtr action) {
-        auto ptr = Complete_.find(action->TaId);
+    void OnAction(TActionReq::TPtr ev) {
+        auto ptr = Complete_.find(ev->TaId);
 
         if (ptr == Complete_.end()) {
             Send(
-                    action->Sender(),
+                    ev->Sender(),
                     MakeEvent<TActionResp>(NState::TStateError{NState::TStateError::UNKNOWN, "table not found"})
                 );
 
@@ -77,8 +77,8 @@ private:
 
         auto& state = ptr->second;
 
-        auto res = state.State->OnAction(action->Action);
-        Send(action->Sender(), MakeEvent<TActionResp>(std::move(res)));
+        auto res = state.State->OnAction(ev->Action);
+        Send(ev->Sender(), MakeEvent<TActionResp>(std::move(res)));
 
         if (!res.Succeed()) {
             return;
@@ -86,12 +86,12 @@ private:
 
         for (auto pos: NState::AllPositions) {
             auto snapshot = state.State->Snapshot(pos);
-            snapshot.LastEvent = action->Action;
+            snapshot.LastEvent = ev->Action;
             Send(state.Membership.Member(pos), MakeEvent<TSnapshot>(std::move(snapshot)));
         }
     }
 
-    void OnJoinAny(TJoinAnyReq::TPtr req) {
+    void OnJoinAny(TJoinAnyReq::TPtr ev) {
         if (Pending_.empty()) {
             Pending_.emplace(
                     std::make_pair(GenerateTableId(), TTable{{}, CreateState(NState::CreateRandomGenerator())})
@@ -100,11 +100,11 @@ private:
 
         auto& table = Pending_.begin()->second;
 
-        auto taPos = table.Membership.Join(req->Sender());
+        auto taPos = table.Membership.Join(ev->Sender());
 
         TJoinAnyResp resp(Pending_.begin()->first, taPos);
 
-        Send(req->Sender(), MakeEvent<TJoinAnyResp>(std::move(resp)));
+        Send(ev->Sender(), MakeEvent<TJoinAnyResp>(std::move(resp)));
 
         if (table.Membership.Complete()) {
             table.State->Start();

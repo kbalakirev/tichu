@@ -24,6 +24,12 @@ namespace NEvUserManager {
         TUserId UserId;
         NActors::TEventPtr Event;
     };
+
+    struct TTableStreamReq: public NActors::TEvent<TTableStreamReq> {
+    };
+
+    struct TTableStreamError: public NActors::TEvent<TTableStreamError> {
+    };
 }
 
 struct TUserManagerOptions {

@@ -23,6 +23,7 @@ private:
     struct TTable {
         TTableId Table;
         EPosition Position;
+        NGameplay::NState::TSnapshot LastSnapshot;
         NActors::TActorId Consumer;
     };
 
@@ -35,10 +36,6 @@ private:
 
             return;
         }
-
-        ActiveTable_ = TTable {
-            .Consumer = ev->Sender()
-        };
 
         Send(TableManager_, std::move(ev));
     }
@@ -72,7 +69,19 @@ private:
             return;
         }
 
+        ActiveTable_->LastSnapshot = ev->Snapshot;
+
         Send(ActiveTable_->Consumer, std::move(ev));
+    }
+
+    void OnTableStream(TTableStreamReq::TPtr ev) {
+        if (!ActiveTable_) {
+            Send(ev->Sender(), MakeEvent<TTableStreamError>());
+            return;
+        }
+
+        ActiveTable_->Consumer = ev->Sender();
+        Send(ev->Sender(), MakeEvent<NEvTableManager::TSnapshot>(ActiveTable_->LastSnapshot));
     }
 
     CREATE_STATE_FUNC(StateWork) {
@@ -80,6 +89,7 @@ private:
         CREATE_HANDLER(NEvTableManager::TJoinAnyResp, OnJoinResp);
         CREATE_HANDLER(NEvTableManager::TActionReq, OnAction);
         CREATE_HANDLER(NEvTableManager::TSnapshot, OnSnapshot);
+        CREATE_HANDLER(TTableStreamReq, OnTableStream);
     }
 
     THandler Bootstrap() override {

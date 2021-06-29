@@ -147,7 +147,7 @@ CAF_ALLOW_UNSAFE_MESSAGE_TYPE(NActors::TEventPtr)
 
 #define ACTORS_MAIN() \
     void caf_main(caf::actor_system& sys) { \
-        TActorSystem::Instance(&sys) \
+        TActorSystem::Instance(&sys); \
         ActorsMain(); \
     } \
     CAF_MAIN(caf::id_block::BASE)

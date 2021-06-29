@@ -5,6 +5,7 @@
 #include <server/lib/gameplay/cards/cards.h>
 
 #include <variant>
+#include <cassert>
 
 namespace NTichu::NGameplay::NState {
 
@@ -44,6 +45,32 @@ using TEvent = std::variant<
         TEvMove,
         TEvPass,
         TEvGiveDragon>;
+
+inline EPosition& Sender(TEvent& ev) {
+    switch (ev.index()) {
+        case 1: {
+            return std::get<TEvGTChoice>(ev).Who;
+        }
+        case 2: {
+            return std::get<TEvExchange>(ev).Who;
+        }
+        case 3: {
+            return std::get<TEvCall>(ev).Who;
+        }
+        case 4: {
+            return std::get<TEvMove>(ev).Who;
+        }
+        case 5: {
+            return std::get<TEvPass>(ev).Who;
+        }
+        case 6: {
+            return std::get<TEvGiveDragon>(ev).From;
+        }
+        default: {
+            assert(false);
+        }
+    }
+}
 
 class IEventConsumer {
 public:

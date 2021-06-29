@@ -61,6 +61,8 @@ private:
             return;
         }
 
+        Sender(ev->Action) = ActiveTable_->Position;
+
         TActorSystem::Send(ev->Sender(), TableManager_, std::move(ev));
     }
 

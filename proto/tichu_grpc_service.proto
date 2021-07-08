@@ -82,7 +82,7 @@ message TTableId {
 }
 
 message TJoinAnyReq {
-    TAuthToken Token;
+    TAuthToken Token = 1;
 }
 
 message TJoinResp {

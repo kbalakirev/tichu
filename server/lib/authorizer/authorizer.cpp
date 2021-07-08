@@ -1,57 +1,50 @@
 #include "authorizer.h"
 
 #include <unordered_map>
+#include <sstream>
 
 using namespace NActors;
 
 namespace NTichu::NServer {
 
-using namespace NEvAuthorizer;
+using namespace NAuthorizerEvent;
 
 class TAuthorizer: public IActor {
 public:
     explicit TAuthorizer(TActorConfig& config)
         : IActor(config)
     {
-        auto now = std::chrono::system_clock::now();
-        Tag = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
     }
 
 private:
-    TAuthToken GenerateToken() {
-        ++Initializer;
+    void OnRegisterRequest(TRegisterRequest::TPtr ev) {
+        ++Tag_;
 
-        TAuthToken token;
-        token.resize(sizeof(ui64) + sizeof(ui64));
-        std::memcpy(token.data(), &Tag, sizeof(ui64));
-        std::memcpy(token.data() + sizeof(ui64), &Initializer, sizeof(ui64));
+        std::stringstream ss;
+        ss << Tag_;
 
-        return token;
+        auto [_, found] = AuthTable_.emplace(std::make_pair(ss.str(), Tag_));
+        assert(!found);
+
+        Send(ev->Sender(), MakeEvent<TRegisterResponse>(ss.str()));
     }
 
-    void OnProxyReq(TProxyReq::TPtr ev) {
-        auto ptr = AuthTable_.find(ev->Token);
+    void OnAuthRequest(TAuthRequest::TPtr ev) {
+        auto it = AuthTable_.find(ev->Token);
 
-        if (ptr == AuthTable_.end()) {
-            Send(ev->Sender(), MakeEvent<TProxyError>("invalid auth token"));
+        if (it == AuthTable_.end()) {
+            Send(ev->Sender(), MakeEvent<TAuthResponse>(INVALID_USER_ID));
             return;
         }
 
-        TActorSystem::Send(ev->Sender(), ev->To, ev->Event);
-    }
+        const TUserId& userId = it->second;
 
-    void OnRegisterReq(TRegisterReq::TPtr ev) {
-        auto token = GenerateToken();
-        TUserId userId = Initializer;
-
-        AuthTable_.emplace(std::make_pair(token, userId));
-
-        Send(ev->Sender(), MakeEvent<TRegisterResp>(token));
+        Send(ev->Sender(), MakeEvent<TAuthResponse>(userId));
     }
 
     CREATE_STATE_FUNC(StateWork) {
-        CREATE_HANDLER(TProxyReq, OnProxyReq);
-        CREATE_HANDLER(TRegisterReq, OnRegisterReq);
+        CREATE_HANDLER(TRegisterRequest, OnRegisterRequest);
+        CREATE_HANDLER(TAuthRequest, OnAuthRequest);
     }
 
     THandler Bootstrap() override {
@@ -62,8 +55,7 @@ private:
     using TTable = std::unordered_map<TAuthToken , TUserId>;
     TTable AuthTable_;
 
-    ui64 Initializer{0};
-    ui64 Tag{0};
+    ui64 Tag_{0};
 };
 
 NActors::TActorId CreateAuthorizer() {

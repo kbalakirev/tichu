@@ -25,8 +25,8 @@
 #define AS_STATE_FUNC(Name) \
     [this](TEventPtr ev) { Name(std::move(ev)); }
 
-#define NEW_EVENT(Event) \
-    struct Event: public TEvent<Event>
+#define NEW_EVENT(TType) \
+    struct TType: public NActors::TEvent< TType >
 
 namespace NActors {
 

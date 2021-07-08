@@ -26,7 +26,7 @@ void IActor::Become(NActors::IActor::THandler handler) {
 }
 
 caf::behavior IActor::make_behavior() {
-    Self_ = new caf::actor(caf::actor_cast<caf::actor>(address());)
+    Self_ = new caf::actor(caf::actor_cast<caf::actor>(address()));
     return Bootstrap();
 }
 

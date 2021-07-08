@@ -13,6 +13,8 @@ namespace NTichu::NServer {
 
 using TUserId = ui64;
 
+constexpr TUserId INVALID_USER_ID = 0;
+
 namespace NEvUserManager {
     struct TProxy: NActors::TEvent<TProxy> {
         TProxy(TUserId userId, NActors::TEventPtr event)

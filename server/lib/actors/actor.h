@@ -25,6 +25,9 @@
 #define AS_STATE_FUNC(Name) \
     [this](TEventPtr ev) { Name(std::move(ev)); }
 
+#define NEW_EVENT(Event) \
+    struct Event: public TEvent<Event>
+
 namespace NActors {
 
 using TDuration = std::chrono::duration<ui64>;

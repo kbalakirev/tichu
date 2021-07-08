@@ -10,6 +10,9 @@ namespace NTichu::NServer {
 
 using TAuthToken = std::string;
 
+struct TAuthorizerEvent {
+};
+
 namespace NEvAuthorizer {
     struct TRegisterReq: public NActors::TEvent<TRegisterReq> {
     };

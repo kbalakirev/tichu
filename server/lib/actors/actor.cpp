@@ -8,7 +8,6 @@ TActorId TEventBase::Sender() const {
 
 IActor::IActor(TActorConfig& config)
     : TBase(config)
-    , Holder_(new THolder{caf::actor_cast<caf::actor>(address())})
 {
 }
 
@@ -17,7 +16,8 @@ TActorId IActor::Self() const {
 }
 
 void IActor::Quit() {
-    delete Holder_;
+    delete Self_;
+    Self_ = nullptr;
     quit();
 }
 
@@ -26,6 +26,7 @@ void IActor::Become(NActors::IActor::THandler handler) {
 }
 
 caf::behavior IActor::make_behavior() {
+    Self_ = new caf::actor(caf::actor_cast<caf::actor>(address());)
     return Bootstrap();
 }
 

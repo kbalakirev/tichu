@@ -105,11 +105,7 @@ protected:
 private:
     caf::behavior make_behavior() override;
 
-    struct THolder {
-        caf::actor Self;
-    };
-
-    THolder* Holder_;
+    caf::actor* Self_;
 };
 
 class TActorSystem {

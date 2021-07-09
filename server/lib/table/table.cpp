@@ -1,9 +1,10 @@
 #include "table.h"
 
-#include <server/lib/gameplay/state/state.h>
 #include <server/lib/flags/flags.h>
 
 #include <unordered_map>
+#include <unordered_set>
+#include <optional>
 #include <array>
 #include <memory>
 #include <cassert>
@@ -11,48 +12,59 @@
 using namespace NActors;
 
 namespace NTichu::NServer {
+namespace {
 
-using namespace NEvTableManager;
-using namespace NGameplay;
+using namespace NTableEvent;
+using namespace NTichu::NGameplay::NState;
 
-template <class TPlayer>
+using TTableMember = NActors::TActorId;
+
 class TTableMembership {
 public:
-    bool Complete() const {
-        return ValidatePosition(FindPosition());
-    }
+    EPosition Join(TTableMember member) {
+        if (Complete()) {
+            return EPosition::INVALID;
+        }
 
-    NState::EPosition Join(TPlayer player) {
-        assert(!Complete());
-
-        NState::EPosition pos = FindPosition();
-
-        PosMap_.Store((ui8) pos);
-        Membership[(ui8) pos] = std::move(player);
-
-        return pos;
-    }
-
-    TPlayer Member(NState::EPosition pos) const {
-        assert(PosMap_.Stored((ui8) pos));
-
-        return Membership[(ui8) pos];
-    }
-
-private:
-    NState::EPosition FindPosition() const {
-        for (auto pos: NState::AllPositions) {
-            if (!PosMap_.Stored((ui8) pos)) {
-                return pos;
+        for (size_t i = 0; i < (size_t) EPosition::NUM; ++i) {
+            if (!Members_[i].has_value()) {
+                return (EPosition) i;
             }
         }
 
-        return NState::EPosition::INVALID;
+        return EPosition::INVALID;
+    }
+
+    bool Leave(EPosition position) {
+        if (!ValidatePosition(position)) {
+            return false;
+        }
+
+        if (!Members_[(ui32) position].has_value()) {
+            return false;
+        }
+
+        Members_[(ui32) position].reset();
+        return true;
+    }
+
+    bool Complete() const {
+        return Count() != (size_t) EPosition::NUM;
+    }
+
+    size_t Count() const {
+        size_t count = 0;
+        for (const auto& member: Members_) {
+            count += member.has_value();
+        }
+
+        return count;
     }
 
 private:
-    TFlags PosMap_;
-    std::array<TPlayer, (ui32) NState::EPosition::NUM> Membership;
+    using TMembers = std::array<std::optional<TTableMember>, (ui32) EPosition::NUM>;
+
+    TMembers Members_;
 };
 
 class TTableManager: public IActor {
@@ -63,64 +75,169 @@ public:
     }
 
 private:
-    void OnAction(TActionReq::TPtr ev) {
-        auto ptr = Complete_.find(ev->TaId);
+    void NotifyOne(TActorId actor) {
+        std::vector<TTableListItem> tables;
+        tables.reserve(Pending_.size());
 
-        if (ptr == Complete_.end()) {
-            Send(
-                    ev->Sender(),
-                    MakeEvent<TActionResp>(NState::TStateError{NState::TStateError::UNKNOWN, "table not found"})
-                );
+        for (const auto& [key, value]: Pending_) {
+            TTableListItem item{
+                .TableId = key,
+                .Options = value.Options,
+                .Count = value.Membership.Count()
+            };
 
-            return;
+            tables.emplace_back(std::move(item));
         }
 
-        auto& state = ptr->second;
+        Send(actor, MakeEvent<TSubscribeEvent>(std::move(tables)));
+    }
 
-        auto res = state.State->OnAction(ev->Action);
-        Send(ev->Sender(), MakeEvent<TActionResp>(std::move(res)));
-
-        if (!res.Succeed()) {
-            return;
-        }
-
-        for (auto pos: NState::AllPositions) {
-            auto snapshot = state.State->Snapshot(pos);
-            snapshot.LastEvent = ev->Action;
-            Send(state.Membership.Member(pos), MakeEvent<TSnapshot>(std::move(snapshot)));
+    void NotifyAll() {
+        for (auto actor: Subscribers_) {
+            NotifyOne(actor);
         }
     }
 
-    void OnJoinAny(TJoinAnyReq::TPtr ev) {
-        if (Pending_.empty()) {
-            Pending_.emplace(
-                    std::make_pair(GenerateTableId(), TTable{{}, CreateState(NState::CreateRandomGenerator())})
-                );
-        }
+    void OnJoinAny(TJoinAnyRequest::TPtr ev) {
+        TTable table;
 
-        auto& table = Pending_.begin()->second;
+        if (!Pending_.empty()) {
+            auto& value = Pending_.begin()->second;
+            auto key = Pending_.begin()->first;
 
-        auto taPos = table.Membership.Join(ev->Sender());
+            table.TableId = key;
+            table.Position = value.Membership.Join(ev->Sender());
 
-        TJoinAnyResp resp(Pending_.begin()->first, taPos);
-
-        Send(ev->Sender(), MakeEvent<TJoinAnyResp>(std::move(resp)));
-
-        if (table.Membership.Complete()) {
-            table.State->Start();
-
-            for (auto pos: NState::AllPositions) {
-                Send(table.Membership.Member(pos), MakeEvent<TSnapshot>(table.State->Snapshot(pos)));
+            if (value.Membership.Complete()) {
+                Complete_.emplace(std::make_pair(key, std::move(value)));
+                Pending_.erase(Pending_.begin());
             }
 
-            auto node = Pending_.extract(Pending_.begin());
-            Complete_.emplace(std::make_pair(node.key(), std::move(node.mapped())));
+        } else {
+            ++Tag_;
+
+            TTableOptions options {
+                .Name = "default"
+            };
+
+            TValue value {
+                .Options = options
+            };
+
+            table.TableId = Tag_;
+            table.Position = value.Membership.Join(ev->Sender());
+        }
+
+        ev->Answer(Self(), MakeEvent<TJoinTableResponse>(table));
+
+        NotifyAll();
+    }
+
+    void OnCreateTable(TCreateTableRequest::TPtr ev) {
+        ++Tag_;
+
+        TValue value {
+            .Options = ev->Options
+        };
+
+        TTable table {
+            .TableId = Tag_,
+            .Position = value.Membership.Join(ev->Sender())
+        };
+
+        Pending_.emplace(std::make_pair(Tag_, std::move(value)));
+
+        ev->Answer(Self(), MakeEvent<TCreateTableResponse>(table));
+
+        NotifyAll();
+    }
+
+    void OnJoinTable(TJoinTableRequest::TPtr ev) {
+        TTableId taId = ev->Table;
+
+        auto it = Pending_.find(taId);
+
+        if (it == Pending_.end()) {
+            TFindTableError error;
+
+            if (Complete_.find(taId) != Complete_.end()) {
+                error = TFindTableError{TFindTableError::TABLE_IS_FULL, "table is full"};
+            } else {
+                error = TFindTableError{TFindTableError::TABLE_NOT_EXISTS, "table doesn't exist"};
+            }
+
+            ev->Answer(Self(), MakeEvent<TJoinTableResponse>(std::move(error)));
+
+            return;
+        }
+
+        auto& value = it->second;
+        auto key = it->first;
+
+        TTable table {
+            .TableId = key,
+            .Position = value.Membership.Join(ev->Sender())
+        };
+
+        if (value.Membership.Complete()) {
+            Complete_.emplace(std::make_pair(key, std::move(value)));
+            Pending_.erase(it);
+        }
+
+        ev->Answer(Self(), MakeEvent<TJoinTableResponse>(table));
+
+        NotifyAll();
+    }
+
+    void OnSubscribe(TSubscribeRequest::TPtr ev) {
+        Subscribers_.emplace(ev->Sender());
+    }
+
+    void OnUnSubscribe(TUnSubscribeRequest::TPtr ev) {
+        Subscribers_.erase(ev->Sender());
+    }
+
+    void OnLeaveTable(TLeaveTableRequest::TPtr ev) {
+        auto table = ev->Table;
+
+        bool complete = false;
+
+        auto it = Pending_.find(table.TableId);
+        if (it == Pending_.end()) {
+            it = Complete_.find(table.TableId);
+
+            if (it == Complete_.end()) {
+                auto error = TFindTableError{TFindTableError::TABLE_NOT_EXISTS, "user is not member of the table"};
+                ev->Answer(Self(), MakeEvent<TLeaveTableResponse>(std::move(error)));
+                return;
+            }
+        }
+
+        bool suc = it->second.Membership.Leave(table.Position);
+
+        if (suc) {
+            if (complete) {
+                TValue& value = it->second;
+                Pending_.emplace(std::make_pair(table.TableId, std::move(value)));
+                Complete_.erase(it);
+            }
+
+            ev->Answer(Self(), MakeEvent<TLeaveTableResponse>(table));
+            NotifyAll();
+        } else {
+            auto error = TFindTableError{TFindTableError::UNKNOWN, "user is not member of the table"};
+            ev->Answer(Self(), MakeEvent<TLeaveTableResponse>(std::move(error)));
+            return;
         }
     }
 
     CREATE_STATE_FUNC(StateWork) {
-        CREATE_HANDLER(TActionReq, OnAction);
-        CREATE_HANDLER(TJoinAnyReq, OnJoinAny);
+        CREATE_HANDLER(TJoinAnyRequest, OnJoinAny);
+        CREATE_HANDLER(TCreateTableRequest, OnCreateTable);
+        CREATE_HANDLER(TJoinTableRequest, OnJoinTable);
+        CREATE_HANDLER(TSubscribeRequest, OnSubscribe);
+        CREATE_HANDLER(TUnSubscribeRequest, OnUnSubscribe);
+        CREATE_HANDLER(TLeaveTableRequest, OnLeaveTable);
     }
 
     THandler Bootstrap() override {
@@ -128,22 +245,22 @@ private:
     }
 
 private:
-    TTableId GenerateTableId() {
-        ++Initializer;
-        return Initializer;
-    }
-
-private:
-    struct TTable {
-        TTableMembership<NActors::TActorId> Membership;
-        std::unique_ptr<NState::IState> State;
+    struct TValue {
+        TTableOptions Options;
+        TTableMembership Membership;
     };
 
-    std::unordered_map<TTableId, TTable> Complete_;
-    std::unordered_map<TTableId, TTable> Pending_;
+    using TTables = std::unordered_map<TTableId, TValue>;
 
-    ui64 Initializer{0};
+    TTables Pending_;
+    TTables Complete_;
+
+    ui64 Tag_{0};
+
+    std::unordered_set<TActorId> Subscribers_;
 };
+
+}
 
 NActors::TActorId CreateTableManager() {
     return TActorSystem::Instance().Spawn<TTableManager>();

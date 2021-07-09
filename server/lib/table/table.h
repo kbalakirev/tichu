@@ -4,7 +4,9 @@
 #include <server/lib/types/types.h>
 
 #include <server/lib/actors/actor.h>
+#include <server/lib/user/user.h>
 #include <server/lib/gameplay/state/events.h>
+#include <server/lib/gameplay/state/state.h>
 #include <server/lib/gameplay/gameplay.h>
 
 #include <functional>
@@ -14,66 +16,134 @@ namespace NTichu::NServer {
 
 using TTableId = ui64;
 
-namespace NEvTableManager {
-    struct TActionReq: public NActors::TEvent<TActionReq> {
-        TActionReq(TTableId taId, NGameplay::NState::TEvent action)
-                : TaId(taId)
-                , Action(std::move(action))
-        {
-        }
+struct TTableOptions {
+    std::string Name;
+};
 
-        TTableId TaId;
-        NGameplay::NState::TEvent Action;
+struct TTableListItem {
+    TTableId TableId;
+    TTableOptions Options;
+    size_t Count{0};
+};
+
+namespace NTableEvent {
+    struct TTable {
+        TTableId TableId;
+        NTichu::NGameplay::NState::EPosition Position;
     };
 
-    struct TActionResp: public NActors::TEvent<TActionResp> {
-        TActionResp(NGameplay::NState::TStateErrorOr errorOr)
-                : ErrorOr(std::move(errorOr))
-        {
-        }
-
-        NGameplay::NState::TStateErrorOr ErrorOr;
+    NEW_EVENT(TJoinAnyRequest) {
     };
 
-    struct TSnapshot: public NActors::TEvent<TSnapshot> {
-        TSnapshot(NGameplay::NState::TSnapshot snapshot)
-                : Snapshot(std::move(snapshot))
+    NEW_EVENT(TGameActionRequest) {
+        explicit TGameActionRequest(NTichu::NGameplay::NState::TEvent event)
+            : Event(std::move(event))
         {
         }
 
-        NGameplay::NState::TSnapshot Snapshot;
+        NTichu::NGameplay::NState::TEvent Event;
     };
 
-    struct TJoinAnyReq: public NActors::TEvent<TJoinAnyReq> {
+    NEW_EVENT(TGameActionResponse) {
+        explicit TGameActionResponse(NTichu::NGameplay::NState::TStateErrorOr response)
+            : Response(std::move(response))
+        {
+        }
+
+        NTichu::NGameplay::NState::TStateErrorOr Response;
     };
 
-    struct TJoinAnyResp: public NActors::TEvent<TJoinAnyResp> {
-        TJoinAnyResp(TTableId taId, NGameplay::NState::EPosition pos)
-                : TaId(taId)
-                , Position(pos)
+    NEW_EVENT(TCreateTableRequest) {
+        explicit TCreateTableRequest(TTableOptions options)
+            : Options(std::move(options))
         {
         }
 
-        TJoinAnyResp(std::string mes)
-                : TaId{}
-                , Position(NGameplay::NState::EPosition::INVALID)
-                , Status(ERROR)
-                , Message(std::move(mes))
+        TTableOptions Options;
+    };
+
+    NEW_EVENT(TCreateTableResponse) {
+        explicit TCreateTableResponse(TTable table)
+            : Table(table)
         {
         }
 
-        enum EStatus {
-            OK,
-            ERROR
+        TTable Table;
+    };
+
+    NEW_EVENT(TJoinTableRequest) {
+        explicit TJoinTableRequest(TTableId table)
+            : Table(table)
+        {
+        }
+
+        TTableId Table;
+    };
+
+    struct TFindTableError {
+        enum EType {
+            UNKNOWN,
+            TABLE_IS_FULL,
+            TABLE_NOT_EXISTS
         };
 
-        TTableId TaId;
-        NGameplay::NState::EPosition Position;
-
-        EStatus Status = OK;
+        EType Type{UNKNOWN};
         std::string Message;
     };
-}
+
+    NEW_EVENT(TJoinTableResponse) {
+        explicit TJoinTableResponse(TFindTableError error)
+            : Response(std::move(error))
+        {
+        }
+
+        explicit TJoinTableResponse(TTable table)
+            : Response(table)
+        {
+        }
+
+        TErrorOr<TTable, TFindTableError> Response;
+    };
+
+    NEW_EVENT(TSubscribeRequest) {
+    };
+
+    NEW_EVENT(TSubscribeEvent) {
+        explicit TSubscribeEvent(std::vector<TTableListItem> tables)
+            : Tables(std::move(tables))
+        {
+        }
+        
+        std::vector<TTableListItem> Tables;
+    };
+
+    NEW_EVENT(TUnSubscribeRequest) {
+    };
+
+    NEW_EVENT(TLeaveTableRequest) {
+        explicit TLeaveTableRequest(TTable table)
+            : Table(table)
+        {
+        }
+
+        TTable Table;
+    };
+
+    NEW_EVENT(TLeaveTableResponse) {
+        explicit TLeaveTableResponse(TFindTableError error)
+            : Response(std::move(error))
+        {
+        }
+
+        explicit TLeaveTableResponse(TTable table)
+            : Response(table)
+        {
+        }
+
+        TErrorOr<TTable, TFindTableError> Response;
+    };
+
+} // namespace NTableEvent
 
 NActors::TActorId CreateTableManager();
 

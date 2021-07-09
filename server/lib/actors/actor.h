@@ -9,6 +9,7 @@
 #include <vector>
 #include <type_traits>
 #include <functional>
+#include <any>
 
 #define CREATE_STATE_FUNC(Name) \
     void Name(TEventPtr ev)
@@ -62,6 +63,18 @@ class TEventBase {
     template <class TEvent, class... TArgs>
     friend TEventPtr MakeEvent(TArgs... args);
 
+    void Answer(TActorId sender, TEventPtr ev);
+
+    template <class T>
+    void SetCookie(const T& cookie) {
+        Cookie_ = cookie;
+    }
+
+    template <class T>
+    T* GetCookie() {
+        return std::any_cast<T>(&Cookie_);
+    }
+
 public:
     virtual ~TEventBase() = default;
 
@@ -69,6 +82,7 @@ public:
 
 private:
     TActorId Sender_;
+    std::any Cookie_;
 };
 
 template <class T>

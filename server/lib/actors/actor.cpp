@@ -2,6 +2,11 @@
 
 namespace NActors {
 
+void TEventBase::Answer(TActorId sender, TEventPtr ev) {
+    ev->Cookie_ = Cookie_;
+    TActorSystem::Send(sender, Sender_, ev);
+}
+
 TActorId TEventBase::Sender() const {
     return Sender_;
 }

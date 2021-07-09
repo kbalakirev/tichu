@@ -27,7 +27,7 @@
     [this](TEventPtr ev) { Name(std::move(ev)); }
 
 #define NEW_EVENT(TType) \
-    struct TType: public NActors::TEvent< TType >
+    struct TType: public NActors::TEvent<TType>
 
 namespace NActors {
 
@@ -39,6 +39,13 @@ class IActor;
 class TActorId {
 public:
     TActorId() = default;
+
+    ui64 Hash() const;
+
+    bool operator==(const TActorId& other) const;
+    bool operator!=(const TActorId& other) const;
+
+    operator bool() const;
 
 private:
     friend class IActor;
@@ -157,6 +164,13 @@ CAF_BEGIN_TYPE_ID_BLOCK(BASE, caf::first_custom_type_id)
 CAF_END_TYPE_ID_BLOCK(BASE)
 
 CAF_ALLOW_UNSAFE_MESSAGE_TYPE(NActors::TEventPtr)
+
+template <>
+struct std::hash<NActors::TActorId> {
+    ui64 operator()(const NActors::TActorId& actor) const {
+        return actor.Hash();
+    }
+};
 
 #define ACTORS_MAIN() \
     void caf_main(caf::actor_system& sys) { \

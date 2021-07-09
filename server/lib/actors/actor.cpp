@@ -2,6 +2,26 @@
 
 namespace NActors {
 
+ui64 TActorId::Hash() const {
+    return std::hash<void*>()((void*) Actor_.get());
+}
+
+bool TActorId::operator==(const TActorId& other) const {
+    if (!static_cast<bool>(*this) || !static_cast<bool>(other)) {
+        return false;
+    }
+
+    return Actor_.get() == other.Actor_.get();
+}
+
+bool TActorId::operator!=(const TActorId& other) const {
+    return !(*this == other);
+}
+
+TActorId::operator bool() const {
+    return static_cast<bool>(Actor_);
+}
+
 void TEventBase::Answer(TActorId sender, TEventPtr ev) {
     ev->Cookie_ = Cookie_;
     TActorSystem::Send(sender, Sender_, ev);

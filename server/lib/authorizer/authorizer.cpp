@@ -26,20 +26,20 @@ private:
         auto [_, found] = AuthTable_.emplace(std::make_pair(ss.str(), Tag_));
         assert(!found);
 
-        Send(ev->Sender(), MakeEvent<TRegisterResponse>(ss.str()));
+        ev->Answer(Self(), MakeEvent<TRegisterResponse>(ss.str()));
     }
 
     void OnAuthRequest(TAuthRequest::TPtr ev) {
         auto it = AuthTable_.find(ev->Token);
 
         if (it == AuthTable_.end()) {
-            Send(ev->Sender(), MakeEvent<TAuthResponse>(INVALID_USER_ID));
+            ev->Answer(Self(), MakeEvent<TAuthResponse>(INVALID_USER_ID));
             return;
         }
 
         const TUserId& userId = it->second;
 
-        Send(ev->Sender(), MakeEvent<TAuthResponse>(userId));
+        ev->Answer(Self(), MakeEvent<TAuthResponse>(userId));
     }
 
     CREATE_STATE_FUNC(StateWork) {

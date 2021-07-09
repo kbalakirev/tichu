@@ -63,8 +63,6 @@ class TEventBase {
     template <class TEvent, class... TArgs>
     friend TEventPtr MakeEvent(TArgs... args);
 
-    void Answer(TActorId sender, TEventPtr ev);
-
     template <class T>
     void SetCookie(const T& cookie) {
         Cookie_ = cookie;
@@ -79,6 +77,8 @@ public:
     virtual ~TEventBase() = default;
 
     TActorId Sender() const;
+
+    void Answer(TActorId sender, TEventPtr ev);
 
 private:
     TActorId Sender_;

@@ -174,7 +174,7 @@ struct std::hash<NActors::TActorId> {
 
 #define ACTORS_MAIN() \
     void caf_main(caf::actor_system& sys) { \
-        TActorSystem::Instance(&sys); \
+        NActors::TActorSystem::Instance(&sys); \
         ActorsMain(); \
     } \
     CAF_MAIN(caf::id_block::BASE)

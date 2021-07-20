@@ -1,13 +1,14 @@
 #include "authorizer.h"
+#include "events.h"
+#include "def.h"
 
 #include <unordered_map>
 #include <sstream>
 
 using namespace NActors;
 
-namespace NTichu::NServer {
-
-using namespace NAuthorizerEvent;
+namespace NTichu::NServer::NAuthorizer {
+namespace {
 
 class TAuthorizer: public IActor {
 public:
@@ -17,7 +18,7 @@ public:
     }
 
 private:
-    void OnRegisterRequest(TRegisterRequest::TPtr ev) {
+    void OnRegisterRequest(TEvRegisterRequest::TPtr ev) {
         ++Tag_;
 
         std::stringstream ss;
@@ -26,25 +27,25 @@ private:
         auto [_, found] = AuthTable_.emplace(std::make_pair(ss.str(), Tag_));
         assert(!found);
 
-        ev->Answer(Self(), MakeEvent<TRegisterResponse>(ss.str()));
+        ev->Answer(Self(), MakeEvent<TEvRegisterResponse>(ss.str()));
     }
 
-    void OnAuthRequest(TAuthRequest::TPtr ev) {
+    void OnAuthRequest(TEvAuthRequest::TPtr ev) {
         auto it = AuthTable_.find(ev->Token);
 
         if (it == AuthTable_.end()) {
-            ev->Answer(Self(), MakeEvent<TAuthResponse>(INVALID_USER_ID));
+            ev->Answer(Self(), MakeEvent<TEvAuthResponse>(INVALID_USER_ID));
             return;
         }
 
         const TUserId& userId = it->second;
 
-        ev->Answer(Self(), MakeEvent<TAuthResponse>(userId));
+        ev->Answer(Self(), MakeEvent<TEvAuthResponse>(userId));
     }
 
     CREATE_STATE_FUNC(StateWork) {
-        CREATE_HANDLER(TRegisterRequest, OnRegisterRequest);
-        CREATE_HANDLER(TAuthRequest, OnAuthRequest);
+        CREATE_HANDLER(TEvRegisterRequest, OnRegisterRequest);
+        CREATE_HANDLER(TEvAuthRequest, OnAuthRequest);
     }
 
     THandler Bootstrap() override {
@@ -58,8 +59,10 @@ private:
     ui64 Tag_{0};
 };
 
+}
+
 NActors::TActorId CreateAuthorizer() {
     return TActorSystem::Instance().Spawn<TAuthorizer>();
 }
 
-} // namespace NTichu::NServer
+} // namespace NTichu::NServer::NAuthorizer

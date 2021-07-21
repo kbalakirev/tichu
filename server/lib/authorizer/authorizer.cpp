@@ -24,8 +24,8 @@ private:
         std::stringstream ss;
         ss << Tag_;
 
-        auto [_, found] = AuthTable_.emplace(std::make_pair(ss.str(), Tag_));
-        assert(!found);
+        auto [_, notFound] = AuthTable_.emplace(std::make_pair(ss.str(), Tag_));
+        assert(notFound);
 
         ev->Answer(Self(), MakeEvent<TEvRegisterResponse>(ss.str()));
     }

@@ -10,6 +10,8 @@
 
 namespace NTichu::NServer::NTable {
 
+using NTichu::NServer::TUserId;
+
 NEW_EVENT(TEvJoinAnyRequest) {
     explicit TEvJoinAnyRequest(TUserId user)
         : User(user)
@@ -52,23 +54,23 @@ NEW_EVENT(TEvLeaveRequest) {
     TTableId Table;
 };
 
-NEW_EVENT(TEvSubscribeTables) {
+NEW_EVENT(TEvSubscribeTableList) {
 };
 
-NEW_EVENT(TEvUnSubscribeTables) {
+NEW_EVENT(TEvUnSubscribeTableList) {
 };
 
 NEW_EVENT(TEvJoinResponse) {
-    explicit TEvJoinResponse(TErrorOr<TTablePlace, std::string> response)
+    explicit TEvJoinResponse(TErrorOr<TTablePosition, std::string> response)
         : Response(std::move(response))
     {
     }
 
-    TErrorOr<TTablePlace, std::string> Response;
+    TErrorOr<TTablePosition, std::string> Response;
 };
 
 NEW_EVENT(TEvCreateResponse) {
-    explicit TEvCreateResponse(TTablePlace response)
+    explicit TEvCreateResponse(TTablePosition response)
         : Response(response)
     {
     }
@@ -78,7 +80,7 @@ NEW_EVENT(TEvCreateResponse) {
     {
     }
 
-    TErrorOr<TTablePlace, std::string> Response;
+    TErrorOr<TTablePosition, std::string> Response;
 };
 
 NEW_EVENT(TEvLeaveResponse) {
@@ -92,13 +94,13 @@ NEW_EVENT(TEvLeaveResponse) {
     TErrorOr<void, std::string> Response;
 };
 
-NEW_EVENT(TEvTables) {
-    explicit TEvTables(std::vector<TTableListItem> tables)
-        : Tables(std::move(tables))
+NEW_EVENT(TEvTableList) {
+    explicit TEvTableList(std::vector<TTableListItem> list)
+        : List(std::move(list))
     {
     }
 
-    std::vector<TTableListItem> Tables;
+    std::vector<TTableListItem> List;
 };
 
 } // namespace NTichu::NServer::NTable

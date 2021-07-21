@@ -82,7 +82,7 @@ private:
 
 class TTableManager {
 public:
-    TTablePlace JoinAny(TUserId user) {
+    TTablePosition JoinAny(TUserId user) {
         TTableMap::iterator it;
 
         if (Pending_.empty()) {
@@ -99,7 +99,7 @@ public:
         return Join(it, user);
     }
 
-    TErrorOr<TTablePlace, std::string> Join(TTableId table, TUserId user) {
+    TErrorOr<TTablePosition, std::string> Join(TTableId table, TUserId user) {
         auto it = Pending_.find(table);
 
         if (it == Pending_.end()) {
@@ -113,30 +113,30 @@ public:
         return Join(it, user);
     }
 
-    TErrorOr<void, std::string> Leave(TTableId table, TUserId user) {
+    TErrorOr<bool, std::string> Leave(TTableId table, TUserId user) {
         auto it = Pending_.find(table);
         if (it != Pending_.end()) {
-            it->second.Membership.Leave(user);
+            bool left = it->second.Membership.Leave(user);
             if (it->second.Membership.Count() == 0) {
                 Pending_.erase(it);
             }
 
-            return {};
+            return left;
         }
 
         it = Complete_.find(table);
         if (it != Complete_.end()) {
-            it->second.Membership.Leave(user);
+            bool left = it->second.Membership.Leave(user);
             Pending_.emplace(std::make_pair(it->first, std::move(it->second)));
             Complete_.erase(it);
 
-            return {};
+            return left;
         }
 
         return std::string("table not found");
     }
 
-    TTablePlace Create(TUserId user, TTableOptions options) {
+    TTablePosition Create(TUserId user, TTableOptions options) {
         ++Tag_;
 
         TValue value;
@@ -174,7 +174,7 @@ private:
     TTableMap Complete_;
 
 private:
-    TTablePlace Join(TTableMap::iterator it, TUserId user) {
+    TTablePosition Join(TTableMap::iterator it, TUserId user) {
         auto& value = it->second;
         auto key = it->first;
 
@@ -182,7 +182,7 @@ private:
 
         assert(r.Succeed() && "internal error");
 
-        TTablePlace response{
+        TTablePosition response{
             .Table = key,
             .Position = r.Value()
         };
@@ -207,13 +207,15 @@ private:
     void OnJoinAny(TEvJoinAnyRequest::TPtr ev) {
         auto place = Manager_.JoinAny(ev->User);
         ev->Answer(ev->Sender(), MakeEvent<TEvJoinResponse>(place));
-        NotifyTables();
+        
+        OnTableListUpdate();
     }
 
     void OnJoin(TEvJoinRequest::TPtr ev) {
         auto response = Manager_.Join(ev->Table, ev->User);
         ev->Answer(ev->Sender(), MakeEvent<TEvJoinResponse>(std::move(response)));
-        NotifyTables();
+        
+        OnTableListUpdate();
     }
 
     void OnLeave(TEvLeaveRequest::TPtr ev) {
@@ -224,29 +226,31 @@ private:
             ev->Answer(ev->Sender(), MakeEvent<TEvLeaveResponse>());
         }
 
-        NotifyTables();
+        if (response.Value()) {
+            OnTableListUpdate();
+        }
     }
 
     void OnCreate(TEvCreateRequest::TPtr ev) {
         auto response = Manager_.Create(ev->User, ev->Options);
         ev->Answer(ev->Sender(), MakeEvent<TEvCreateResponse>(response));
 
-        NotifyTables();
+        OnTableListUpdate();
     }
 
-    void OnSubscribeTables(TEvSubscribeTables::TPtr ev) {
-        Watchers_.emplace(ev->Sender());
-        Send(ev->Sender(), MakeEvent<TEvTables>(Manager_.List()));
+    void OnSubscribeTableList(TEvSubscribeTableList::TPtr ev) {
+        TableListSubs.emplace(ev->Sender());
+        Send(ev->Sender(), MakeEvent<TEvTableList>(Manager_.List()));
     }
 
-    void OnUnSubscribeTables(TEvUnSubscribeTables::TPtr ev) {
-        Watchers_.erase(ev->Sender());
+    void OnUnSubscribeTableList(TEvUnSubscribeTableList::TPtr ev) {
+        TableListSubs.erase(ev->Sender());
     }
 
-    void NotifyTables() {
+    void OnTableListUpdate() {
         auto tables = Manager_.List();
-        for (const auto& actor: Watchers_) {
-            Send(actor, MakeEvent<TEvTables>(tables));
+        for (const auto& actor: TableListSubs) {
+            Send(actor, MakeEvent<TEvTableList>(tables));
         }
     }
 
@@ -255,8 +259,8 @@ private:
         CREATE_HANDLER(TEvJoinRequest, OnJoin);
         CREATE_HANDLER(TEvCreateRequest, OnCreate);
         CREATE_HANDLER(TEvLeaveRequest, OnLeave);
-        CREATE_HANDLER(TEvSubscribeTables, OnSubscribeTables);
-        CREATE_HANDLER(TEvUnSubscribeTables, OnUnSubscribeTables);
+        CREATE_HANDLER(TEvSubscribeTableList, OnSubscribeTableList);
+        CREATE_HANDLER(TEvUnSubscribeTableList, OnUnSubscribeTableList);
     }
 
     THandler Bootstrap() override {
@@ -265,7 +269,7 @@ private:
 
 private:
     TTableManager Manager_;
-    std::unordered_set<TActorId> Watchers_;
+    std::unordered_set<TActorId> TableListSubs;
 };
 
 }

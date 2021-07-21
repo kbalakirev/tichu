@@ -1,6 +1,6 @@
 #pragma once
 
-#include "events.h"
+#include <server/lib/actors/actor.h>
 
 namespace NTichu::NServer::NTable {
 

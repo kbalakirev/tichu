@@ -13,7 +13,7 @@ struct TTableOptions {
     std::string Name;
 };
 
-struct TTablePlace {
+struct TTablePosition {
     TTableId Table;
     NGameplay::NState::EPosition Position;
 };

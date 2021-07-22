@@ -160,10 +160,11 @@ public:
     {
     }
 
-private:
     TRpc::TRequest& GetRequest() override {
         return Request_;
     }
+
+private:
 
     void WriteImpl(const TGrpcMessage& message) override {
         const typename TRpc::TResponse* response = dynamic_cast<const typename TRpc::TResponse*>(&message);

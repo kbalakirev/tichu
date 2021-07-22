@@ -23,7 +23,7 @@ void ActorsMain() {
 
     server.RegisterRpc<NApi::TJoinTableHandler>(NApi::CreateJoinTableActorFactory(authorizer, tableManager));
 
-    server.RegisterRpc<NApi::TCreateTableHandler>(NApi::CreateJoinTableActorFactory(authorizer, tableManager));
+    server.RegisterRpc<NApi::TCreateTableHandler>(NApi::CreateCreateTableActorFactory(authorizer, tableManager));
 
     server.RegisterRpc<NApi::TJoinTableHandler>(NApi::CreateCreateTableActorFactory(authorizer, tableManager));
 

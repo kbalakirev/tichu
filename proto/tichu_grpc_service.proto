@@ -75,6 +75,7 @@ message TLeaveTableRequest {
 }
 
 message TLeaveTableResponse {
+    string error = 1;
 }
 
 message TSubscribeTableList {

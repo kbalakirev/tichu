@@ -3,197 +3,83 @@ syntax = "proto3";
 package tichu;
 
 service TTichuGrpcService {
-    rpc JoinAnyTable(TJoinAnyReq) returns (TJoinResp);
+    rpc JoinAnyTable(TJoinAnyTableRequest) returns (TJoinTableResponse);
+    rpc JoinTable(TJoinTableRequest) returns (TJoinTableResponse);
+    rpc CreateTable(TCreateTableRequest) returns (TCreateTableResponse);
+    rpc LeaveTable(TLeaveTableRequest) returns (TLeaveTableResponse);
+    rpc SubscribeTableList(TSubscribeTableList) returns (stream TTableList);
 
-    rpc Register(TRegisterReq) returns (TRegisterResp);
-
-    rpc Act(TAction) returns (TActionResp);
-
-    rpc TableStream(TTableStreamReq) returns (stream TGameSnapshot);
-}
-
-message TAuthToken {
-    string Token = 1;
-}
-
-enum EValue {
-    DOG_VALUE = 0;
-    MAH_JONG_VALUE = 1;
-    PHOENIX_VALUE = 2;
-    TWO_VALUE = 4;
-    THREE_VALUE = 8;
-    FOUR_VALUE = 12;
-    FIVE_VALUE = 16;
-    SIX_VALUE = 20;
-    SEVEN_VALUE = 24;
-    EIGHT_VALUE = 28;
-    NINE_VALUE = 32;
-    TEN_VALUE = 36;
-    JACK_VALUE = 40;
-    QUEEN_VALUE = 44;
-    KING_VALUE = 48;
-    ACE_VALUE = 52;
-    DRAGON_VALUE = 56;
-}
-
-enum ESuit {
-    JACK_SUIT = 0;
-    SWORD_SUIT = 1;
-    PAGODA_SUIT = 2;
-    STAR_SUIT = 3;
-}
-
-message TCard {
-    EValue Value = 1;
-    ESuit Suit = 2;
-}
-
-message TCombination {
-    repeated TCard Cards = 1;
-    EValue PhoenixReplace = 2;
+    rpc Register(TRegisterRequest) returns (TRegisterResponse);
 }
 
 enum EPosition {
-    UNDEFINED_POS = 0;
+    POS_0 = 0;
     POS_1 = 1;
     POS_2 = 2;
     POS_3 = 3;
-    POS_4 = 4;
 }
 
-enum ETeam {
-    UNDEFINED_TEAM = 0;
-    TEAM_1 = 1;
-    TEAM_2 = 2;
+message TTableOptions {
+    string name = 1;
 }
 
-enum EGameState {
-    INVALID = 0;
-    NOT_INITIALIZED = 1;
-    EXCHANGING = 2;
-    GAME_OVER = 3;
-    NEW_TURN = 4;
-    TURN = 5;
-    GIVE_DRAGON = 6;
+message TTableListItem {
+    uint64 table_id = 1;
+    TTableOptions options = 2;
+    uint32 joined = 3;
 }
 
-message TTableId {
-    uint64 Identity = 1;
+message TRegisterRequest {
 }
 
-message TJoinAnyReq {
-    TAuthToken Token = 1;
+message TRegisterResponse {
+    string token = 1;
+
+    string error = 2;
 }
 
-message TJoinResp {
-    enum EJoinStatus {
-        OK = 0;
-        ERROR = 1;
-    }
-
-    TTableId Table = 1;
-    EPosition Position = 2;
-
-    EJoinStatus Status = 3;
-    string Message = 4;
+message TJoinAnyTableRequest {
+    string token = 2;
 }
 
-message TGTChoice {
-    bool Choice = 1;
+message TJoinTableResponse {
+    uint64 table_id = 1;
+    EPosition position = 2;
+
+    string error = 3;
 }
 
-message TExchangeItem {
-    EPosition Player = 1;
-    TCard Card = 2;
+message TJoinTableRequest {
+    uint64 table_id = 2;
+
+    string token = 3;
 }
 
-message TExchange {
-    repeated TExchangeItem Exchange = 1;
+message TCreateTableRequest {
+    TTableOptions options = 2;
+
+    string token = 3;
 }
 
-message TCall {
+message TCreateTableResponse {
+    uint64 table_id = 1;
+    EPosition position = 2;
+
+    string error = 3;
 }
 
-message TPass {
+message TLeaveTableRequest {
+    uint64 table_id = 1;
+
+    string token = 2;
 }
 
-message TMove {
-    TCombination Combination = 1;
+message TLeaveTableResponse {
 }
 
-message TGiveDragon {
-    EPosition To = 2;
+message TSubscribeTableList {
 }
 
-message TAction {
-    TAuthToken Token = 1;
-    oneof Action {
-        TGTChoice GTChoice = 2;
-        TExchange Exchange = 3;
-        TCall Call = 4;
-        TPass Pass = 5;
-        TMove Move = 6;
-        TGiveDragon PassDragon = 7;
-    }
-}
-
-message TActionResp {
-    enum EActionStatus {
-        OK = 0;
-        ERROR = 1;
-    }
-
-    EActionStatus Status = 1;
-    string Message = 2;
-}
-
-message TCardsCountItem {
-    EPosition Player = 1;
-    uint32 Count = 2;
-}
-
-message TScore {
-    int32 Team_0 = 1;
-    int32 Team_1 = 2;
-}
-
-message TCallItem {
-    enum ECallType {
-        UNDEFINED = 0;
-        SMALL = 1;
-        GRAND = 2;
-        NONE = 3;
-    }
-
-    EPosition Player = 1;
-    ECallType Type = 2;
-}
-
-message TGameSnapshot {
-    EGameState State = 1;
-    repeated TCard Cards = 2;
-    repeated TCardsCountItem CardsCount = 3;
-
-    EPosition ActivePlayer = 4;
-    EPosition TrickPlayer = 5;
-
-    TScore Score = 6;
-
-    repeated TCallItem Calls = 7;
-    TExchange Exchange = 8;
-
-    TCombination LastComb = 9;
-
-    TAction LastAction = 10;
-}
-
-message TRegisterReq {
-}
-
-message TRegisterResp {
-    TAuthToken Token = 1;
-}
-
-message TTableStreamReq {
-    TAuthToken Token = 1;
+message TTableList {
+    repeated TTableListItem list = 1;
 }
